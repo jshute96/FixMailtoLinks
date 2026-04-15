@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "SkeletonChromeExtension_TODO",
+  "name": "Fix Mailto Links",
   "version": "0.1.0",
-  "description": "TODO: Extension description goes here.",
+  "description": "Replace mailto links with configurable links to other sites",
   "permissions": ["activeTab"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
   "action": {
-    "default_title": "SkeletonTitle_TODO",
+    "default_title": "Fix Mailto Links",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",

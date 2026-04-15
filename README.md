@@ -1,6 +1,7 @@
-# Skeleton Chrome Extension
+# Fix Mailto Links Chrome Extension
 
-TODO: Project description goes here.
+This chrome extension rewrites mailto: links into normal links.
+Users can configure what to link to.
 
 ## Usage
 
@@ -12,7 +13,7 @@ TODO: Describe how to use the extension.
 
 1. Clone this repo and install dependencies:
    ```bash
-   git clone https://github.com/TODO/GoogleDocsDiffRange.git
+   git clone https://github.com/jshute96/GoogleDocsDiffRange.git
    cd GoogleDocsDiffRange
    npm install
    ```
