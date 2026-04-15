@@ -1,0 +1,21 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+
+/tmp/
+
+# claude scratch files
+.claude/projects/
+.claude/worktrees/
+
+# chrome extension
+*.crx
+*.pem
+dist/
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/.playwright/
