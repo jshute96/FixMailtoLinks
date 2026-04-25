@@ -5,11 +5,9 @@ Users can configure what to link to.
 
 ## Usage
 
-- Once installed, any click on a `mailto:` link is intercepted by
-  Chrome and redirected to a configurable URL. By default, clicking
-  such a link runs a Google search for the email address instead of
-  opening an email client. No JavaScript is injected into pages —
-  the redirect is handled by a `declarativeNetRequest` rule.
+- Once installed, every `mailto:` link on every page is rewritten in
+  place. By default, clicking such a link runs a Google search for
+  the email address instead of opening an email client.
 - Click the extension's toolbar icon (or open the extension's options
   from `chrome://extensions`) to change the URL template. Use
   `{email}` as a placeholder for the address; it will be URL-encoded.

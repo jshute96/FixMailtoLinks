@@ -25,8 +25,9 @@ One-line descriptions of every source file, grouped by directory.
 | File | Description |
 |------|-------------|
 | `src/manifest.json` | Manifest V3 manifest, copied verbatim into `dist/` |
-| `src/background.ts` | MV3 service worker — maintains the DNR redirect rule and opens the options page on icon click |
-| `src/config.ts` | Shared config types, defaults, storage helpers, and template→DNR regexSubstitution conversion |
+| `src/background.ts` | MV3 service worker — opens the options page when the toolbar icon is clicked |
+| `src/content.ts` | Content script — rewrites `mailto:` links on every page using the configured URL template |
+| `src/config.ts` | Shared config types, defaults, and storage helpers used by the options page |
 | `src/options.ts` | Options page script — loads/saves the URL template in synced storage |
 | `src/options.html` | Options page markup; opened in a tab and hosts the template editor |
 

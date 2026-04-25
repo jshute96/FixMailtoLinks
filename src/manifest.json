@@ -3,8 +3,7 @@
   "name": "Fix Mailto Links",
   "version": "0.1.0",
   "description": "Replace mailto links with configurable links to other sites",
-  "permissions": ["storage", "declarativeNetRequest"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": ["storage"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -18,6 +17,14 @@
       "128": "icons/icon-128.png"
     }
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
