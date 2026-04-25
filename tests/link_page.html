@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mailto Link Test Page</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 720px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.5;
+      }
+      li {
+        margin: 0.25rem 0;
+      }
+      code {
+        background: #f3f3f3;
+        padding: 0 0.25rem;
+      }
+      .panel {
+        border: 1px solid #ccc;
+        padding: 0.75rem 1rem;
+        margin-top: 1rem;
+      }
+      button {
+        padding: 0.4rem 0.8rem;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Mailto Link Test Page</h1>
+    <p>
+      Use this page to sanity-check that the Fix Mailto Links
+      extension rewrites <code>mailto:</code> links. With the
+      extension installed, every link below should point somewhere
+      other than an email client.
+    </p>
+
+    <h2>Plain links</h2>
+    <ul>
+      <li><a href="mailto:alice@example.com">alice@example.com</a></li>
+      <li><a href="mailto:bob@example.org">Email Bob</a></li>
+      <li>
+        <a href="MAILTO:Carol@Example.COM">Carol (mixed-case scheme)</a>
+      </li>
+    </ul>
+
+    <h2>Links with extras</h2>
+    <ul>
+      <li>
+        <a href="mailto:dave@example.com?subject=Hello&body=Hi%20Dave">
+          Dave (with subject/body)
+        </a>
+      </li>
+      <li>
+        <a href="mailto:team+news@example.com">team+news@example.com</a>
+      </li>
+      <li>
+        <a href="mailto:%22Eve%20Smith%22%20%3Ceve@example.com%3E">
+          Eve (URL-encoded display name)
+        </a>
+      </li>
+    </ul>
+
+    <h2>Nested / styled</h2>
+    <p>
+      Contact <a href="mailto:frank@example.net"><strong>Frank</strong></a>
+      if you have questions, or
+      <a href="mailto:grace@example.net"><em>Grace</em></a> for billing.
+    </p>
+
+    <h2>Dynamically added link</h2>
+    <div class="panel">
+      <p>
+        The extension uses a MutationObserver, so this button adds a
+        new <code>mailto:</code> link after page load — it should also
+        be rewritten.
+      </p>
+      <button id="add">Add another mailto link</button>
+      <ul id="dynamic"></ul>
+    </div>
+
+    <h2>Non-mailto control</h2>
+    <p>
+      This one should be left alone:
+      <a href="https://example.com/contact">regular https link</a>.
+    </p>
+
+    <script>
+      let counter = 1;
+      document.getElementById('add').addEventListener('click', () => {
+        const ul = document.getElementById('dynamic');
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        const addr = `user${counter}@example.com`;
+        a.href = `mailto:${addr}`;
+        a.textContent = addr;
+        li.appendChild(a);
+        ul.appendChild(li);
+        counter += 1;
+      });
+    </script>
+  </body>
+</html>

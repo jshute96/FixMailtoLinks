@@ -1,11 +1,20 @@
-# Fix Mailto Links Chrome Extension
+# ![icon](src/icons/icon-48.png) Fix Mailto Links Chrome Extension
 
 This chrome extension rewrites mailto: links into normal links.
 Users can configure what to link to.
 
 ## Usage
 
-TODO: Describe how to use the extension.
+- Once installed, any click on a `mailto:` link is intercepted by
+  Chrome and redirected to a configurable URL. By default, clicking
+  such a link runs a Google search for the email address instead of
+  opening an email client. No JavaScript is injected into pages —
+  the redirect is handled by a `declarativeNetRequest` rule.
+- Click the extension's toolbar icon (or open the extension's options
+  from `chrome://extensions`) to change the URL template. Use
+  `{email}` as a placeholder for the address; it will be URL-encoded.
+- Settings are stored in Chrome's synced storage, so they follow your
+  Chrome profile across devices.
 
 ## Installation
 

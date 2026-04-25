@@ -3,18 +3,24 @@
   "name": "Fix Mailto Links",
   "version": "0.1.0",
   "description": "Replace mailto links with configurable links to other sites",
-  "permissions": ["activeTab"],
+  "permissions": ["storage", "declarativeNetRequest"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
+  "homepage_url": "https://github.com/jshute96/FixMailtoLinks",
   "action": {
-    "default_title": "Fix Mailto Links",
+    "default_title": "Fix Mailto Links — click to configure",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
     }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "icons": {
     "16": "icons/icon-16.png",

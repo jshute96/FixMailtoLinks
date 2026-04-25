@@ -35,6 +35,11 @@ await cp(resolve(root, 'src/icons'), resolve(dist, 'icons'), { recursive: true }
 //    unpacked from dist/.
 await cp(resolve(root, 'src/manifest.json'), resolve(dist, 'manifest.json'));
 
+// 3b. Copy HTML pages (options, etc.) from src/ -> dist/. tsc only
+//     handles .ts files, so any HTML referenced by the manifest must
+//     be copied here.
+await cp(resolve(root, 'src/options.html'), resolve(dist, 'options.html'));
+
 // 4. Run tsc. Watch mode keeps tsc running until the user Ctrl-C's; we
 //    await its exit so signals route through the build script and a spawn
 //    failure surfaces as a non-zero exit instead of being silently

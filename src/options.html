@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fix Mailto Links — Options</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 560px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        color: #222;
+      }
+      h1 {
+        font-size: 1.25rem;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin-top: 1rem;
+      }
+      input[type='text'] {
+        width: 100%;
+        padding: 0.5rem;
+        font-family: ui-monospace, monospace;
+        box-sizing: border-box;
+      }
+      .hint {
+        color: #555;
+        font-size: 0.9rem;
+        margin-top: 0.25rem;
+      }
+      .row {
+        margin-top: 1.25rem;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      button {
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+      }
+      #status {
+        color: #2a7a2a;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Fix Mailto Links</h1>
+    <p>Configure what <code>mailto:</code> links are rewritten to.</p>
+
+    <label for="urlTemplate">URL template</label>
+    <input id="urlTemplate" type="text" spellcheck="false" />
+    <div class="hint">
+      Use <code>{email}</code> as a placeholder for the email address.
+      It will be URL-encoded when substituted.
+    </div>
+
+    <div class="row">
+      <button id="save" type="button">Save</button>
+      <button id="reset" type="button">Reset to default</button>
+      <span id="status"></span>
+    </div>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
