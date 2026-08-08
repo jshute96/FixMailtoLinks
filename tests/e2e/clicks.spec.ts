@@ -285,6 +285,30 @@ test.describe('following a mailto link with an automatic catch-all target', () =
     await page.close();
   });
 
+  test('cannot be starved by a page that stops propagation', async ({
+    extensionContext,
+    fixtureServer,
+  }) => {
+    // Capture reaches `window` before `document`, so a page listener
+    // there calling stopPropagation() — overlay and analytics libraries
+    // do this — would swallow the click and let the mailto: reach the OS
+    // mail app if our listeners were on the document. Ours are on
+    // `window` and registered at document_start, so nothing the page
+    // adds later can get in front of them.
+    const page = await extensionContext.newPage();
+    await page.goto(linkPage(fixtureServer.baseUrl));
+    await page.evaluate(() => {
+      window.addEventListener('click', (e) => e.stopPropagation(), true);
+      document.addEventListener('click', (e) => e.stopPropagation(), true);
+    });
+
+    await page.getByRole('link', { name: 'alice@example.com' }).click();
+
+    await expect.poll(() => page.url()).toBe(googleSearch('alice@example.com'));
+
+    await page.close();
+  });
+
   test('follows an href that is switched to mailto: after load', async ({
     extensionContext,
     fixtureServer,
@@ -522,9 +546,11 @@ test.describe('modifier and middle clicks', () => {
     // event must reach the browser uncancelled.
     const page = await extensionContext.newPage();
     await page.goto(linkPage(fixtureServer.baseUrl));
+    // The probe has to be a capture listener on `window` — see the
+    // middle-click test below for why nowhere else will do.
     await page.evaluate(() => {
       (window as unknown as { seen: boolean[] }).seen = [];
-      document.addEventListener(
+      window.addEventListener(
         'click',
         (e) => {
           (window as unknown as { seen: boolean[] }).seen.push(e.defaultPrevented);
@@ -591,7 +617,7 @@ test.describe('modifier and middle clicks', () => {
     // doesn't always). What this extension owes the page is that it
     // hasn't cancelled the event, so read defaultPrevented directly.
     //
-    // The probe has to be a *capture* listener on `document`, the same
+    // The probe has to be a *capture* listener on `window`, the same
     // node the content script uses: the content script registers first
     // (document_start) and calls stopPropagation() on the clicks it
     // claims, which would starve a listener anywhere else in the tree.
@@ -601,7 +627,7 @@ test.describe('modifier and middle clicks', () => {
     await page.goto(linkPage(fixtureServer.baseUrl));
     await page.evaluate(() => {
       (window as unknown as { seen: boolean[] }).seen = [];
-      document.addEventListener(
+      window.addEventListener(
         'auxclick',
         (e) => {
           (window as unknown as { seen: boolean[] }).seen.push(e.defaultPrevented);
@@ -626,6 +652,228 @@ test.describe('modifier and middle clicks', () => {
     await expect
       .poll(() => page.evaluate(() => (window as unknown as { seen: boolean[] }).seen))
       .toEqual([false, true]);
+
+    await page.close();
+  });
+});
+
+test.describe('links with no single recipient', () => {
+  const SHARE_HREF = 'mailto:?subject=Check%20this%20out&body=Have%20a%20look';
+
+  test('claims a share link and says there is nothing to look up', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    // An automatic catch-all is configured deliberately: with no address
+    // to substitute it must not be followed — `?q=` is not a search
+    // anyone asked for — and the click must still be claimed, or the
+    // link reaches the OS mail app.
+    await config.setTemplate(`${fixtureServer.baseUrl}/landing.html?to={email}`);
+    const page = await extensionContext.newPage();
+    await page.goto(linkPage(fixtureServer.baseUrl));
+    const before = page.url();
+
+    await page
+      .getByRole('link', { name: 'Share this page (no recipient)' })
+      .click();
+
+    const dialog = page.locator(DIALOG);
+    await expect(dialog.locator('.panel')).toBeVisible();
+    expect(page.url()).toBe(before);
+    await expect(
+      dialog.getByText("This link has no email address, so the links don't work."),
+    ).toBeVisible();
+    // The subject and body are shown, decoded, and the hand-off to the
+    // email app keeps them verbatim — that link is all this dialog can
+    // usefully offer.
+    await expect(dialog.locator('.address')).toHaveText(
+      'mailto:?subject=Check this out&body=Have a look',
+    );
+    await expect(dialog.locator('li a')).toHaveCount(1);
+    await expect(dialog.locator('li a')).toHaveAttribute('href', SHARE_HREF);
+    // Nothing to copy, so the buttons aren't offered at all.
+    await expect(
+      dialog.getByRole('button', { name: 'Copy email address' }),
+    ).toHaveCount(0);
+
+    await dismissDialog(page);
+    await page.close();
+  });
+
+  test('claims a multi-recipient link and offers no targets for it', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    // A template takes one address, so a comma-separated list would look
+    // up a person who doesn't exist — and the domain rules could only
+    // ever match one of the recipients. Both automatic targets below are
+    // therefore skipped in favour of the dialog.
+    await config.setTargets([
+      {
+        emailDomain: '',
+        urlTemplate: `${fixtureServer.baseUrl}/landing.html?to={email}`,
+        openDirectly: true,
+      },
+      {
+        emailDomain: 'example.org',
+        urlTemplate: 'https://example.test/org?q={email}',
+        openDirectly: true,
+      },
+    ]);
+    const page = await extensionContext.newPage();
+    await page.goto(linkPage(fixtureServer.baseUrl));
+    const before = page.url();
+
+    await page
+      .getByRole('link', { name: 'Alice and Bob (two recipients)' })
+      .click();
+
+    const dialog = page.locator(DIALOG);
+    await expect(dialog.locator('.panel')).toBeVisible();
+    expect(page.url()).toBe(before);
+    await expect(
+      dialog.getByText("This link has multiple email addresses, so the links don't work."),
+    ).toBeVisible();
+    // Only the hand-off to the email app, which is the one thing that
+    // still does the right thing with a list of recipients.
+    await expect(dialog.locator('li a')).toHaveCount(1);
+    await expect(dialog.locator('li a')).toHaveAttribute(
+      'href',
+      'mailto:alice@example.com,bob@example.org',
+    );
+    // "Copy username" has no answer for a list, so neither button is
+    // offered.
+    await expect(
+      dialog.getByRole('button', { name: 'Copy email address' }),
+    ).toHaveCount(0);
+
+    await dismissDialog(page);
+    await page.close();
+  });
+
+  // Shapes that name more than one recipient without an obvious comma
+  // between two plain addresses. Each is repointed onto the page's
+  // non-mailto link rather than added to the fixture, which is meant to
+  // stay readable by hand.
+  for (const [label, href] of [
+    // The recipient set is the path address *plus* the `to` headers, so
+    // reading either alone loses someone.
+    ['a path address alongside a to= parameter', 'mailto:alice@example.com?to=bob@example.org'],
+    // A display name on the first entry: splitting has to survive the
+    // angle brackets, or only Eve is seen.
+    [
+      'a display-name address followed by another',
+      'mailto:%22Eve%20Smith%22%20%3Ceve@example.com%3E,bob@example.org',
+    ],
+  ] as const) {
+    test(`counts ${label} as multiple recipients`, async ({
+      extensionContext,
+      fixtureServer,
+      config,
+    }) => {
+      await config.setTemplate(`${fixtureServer.baseUrl}/landing.html?to={email}`);
+      const page = await extensionContext.newPage();
+      await page.goto(linkPage(fixtureServer.baseUrl));
+      const before = page.url();
+      await page.evaluate((value) => {
+        const a = document.querySelector<HTMLAnchorElement>(
+          'a[href="https://example.com/contact"]',
+        );
+        a!.setAttribute('href', value);
+      }, href);
+
+      await page.getByRole('link', { name: 'regular https link' }).click();
+
+      const dialog = page.locator(DIALOG);
+      await expect(dialog.locator('.panel')).toBeVisible();
+      expect(page.url()).toBe(before);
+      await expect(
+        dialog.getByText("This link has multiple email addresses, so the links don't work."),
+      ).toBeVisible();
+
+      await dismissDialog(page);
+      await page.close();
+    });
+  }
+
+  test('a comma inside a quoted local part is not a separator', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    // RFC 6068 requires `%2C` there precisely so it isn't read as one —
+    // but the href is percent-decoded before the split, so the comma is
+    // literal again by then and the split has to know better.
+    await config.setTemplate(`${fixtureServer.baseUrl}/landing.html?to={email}`);
+    const page = await extensionContext.newPage();
+    await page.goto(linkPage(fixtureServer.baseUrl));
+    await page.evaluate(() => {
+      const a = document.querySelector<HTMLAnchorElement>(
+        'a[href="https://example.com/contact"]',
+      );
+      a!.setAttribute('href', 'mailto:%22a%2Cb%22@example.com');
+    });
+
+    await page.getByRole('link', { name: 'regular https link' }).click();
+
+    // One recipient, so it is followed like any other single address.
+    await expect
+      .poll(() => page.url())
+      .toBe(`${fixtureServer.baseUrl}/landing.html?to=%22a%2Cb%22@example.com`);
+
+    await page.close();
+  });
+
+  test('counts repeated to= parameters as multiple recipients', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    // A query may carry more than one `to`, and together they name more
+    // than one recipient. Reading only the first would look up one
+    // person and silently drop the other.
+    await config.setTemplate(`${fixtureServer.baseUrl}/landing.html?to={email}`);
+    const page = await extensionContext.newPage();
+    await page.goto(linkPage(fixtureServer.baseUrl));
+    const before = page.url();
+    await page.evaluate(() => {
+      const a = document.querySelector<HTMLAnchorElement>(
+        'a[href="https://example.com/contact"]',
+      );
+      a!.setAttribute('href', 'mailto:?to=alice@example.com&to=bob@example.org');
+    });
+
+    await page.getByRole('link', { name: 'regular https link' }).click();
+
+    const dialog = page.locator(DIALOG);
+    await expect(dialog.locator('.panel')).toBeVisible();
+    expect(page.url()).toBe(before);
+    await expect(
+      dialog.getByText("This link has multiple email addresses, so the links don't work."),
+    ).toBeVisible();
+
+    await dismissDialog(page);
+    await page.close();
+  });
+
+  test('follows a recipient given as a to= parameter', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    // RFC 6068 allows the address in the query instead of the path, and
+    // such a link is as ordinary as any other.
+    await config.setTemplate(DEFAULT_TEMPLATE);
+    const page = await extensionContext.newPage();
+
+    await expectFollows(
+      page,
+      fixtureServer.baseUrl,
+      'Zoe (recipient in the query)',
+      googleSearch('zoe@example.com'),
+    );
 
     await page.close();
   });

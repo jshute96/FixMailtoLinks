@@ -6,13 +6,16 @@
 //      manifest.json).
 //   3. Copies src/manifest.json -> dist/manifest.json verbatim. Chrome loads
 //      the unpacked extension from dist/, so the manifest must live there.
-//   4. Runs the TypeScript compiler (tsc) to compile src/*.ts -> dist/*.js.
+//   4. Copies src/options.html -> dist/options.html. tsc only handles .ts,
+//      so any HTML the manifest references has to be copied too.
+//   5. Runs the TypeScript compiler (tsc) to compile src/*.ts -> dist/*.js.
 //      With --watch, tsc keeps running and rebuilds on change.
 //
 // Run with `npm run build`. Pass --watch to keep tsc running.
 //
 // Note on watch mode: only TypeScript is watched. If you edit
-// src/manifest.json or swap out icon files, re-run `npm run build`.
+// src/manifest.json, src/options.html, or swap out icon files, re-run
+// `npm run build`.
 
 import { rm, mkdir, cp } from 'node:fs/promises';
 import { spawn, spawnSync } from 'node:child_process';
@@ -35,12 +38,12 @@ await cp(resolve(root, 'src/icons'), resolve(dist, 'icons'), { recursive: true }
 //    unpacked from dist/.
 await cp(resolve(root, 'src/manifest.json'), resolve(dist, 'manifest.json'));
 
-// 3b. Copy HTML pages (options, etc.) from src/ -> dist/. tsc only
-//     handles .ts files, so any HTML referenced by the manifest must
-//     be copied here.
+// 4. Copy HTML pages (options, etc.) from src/ -> dist/. tsc only
+//    handles .ts files, so any HTML referenced by the manifest must
+//    be copied here.
 await cp(resolve(root, 'src/options.html'), resolve(dist, 'options.html'));
 
-// 4. Run tsc. Watch mode keeps tsc running until the user Ctrl-C's; we
+// 5. Run tsc. Watch mode keeps tsc running until the user Ctrl-C's; we
 //    await its exit so signals route through the build script and a spawn
 //    failure surfaces as a non-zero exit instead of being silently
 //    swallowed. Non-watch mode just runs once and propagates the exit code.

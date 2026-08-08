@@ -302,6 +302,45 @@ test.describe('options page', () => {
     }
   });
 
+  test('reports a save the browser refuses', async ({
+    extensionContext,
+    extensionId,
+    config,
+  }) => {
+    await config.setTemplate('https://example.test/lookup?addr={email}');
+    const page = await extensionContext.newPage();
+    await openOptions(page, extensionId);
+
+    // A perfectly valid template that storage still won't take:
+    // chrome.storage.sync caps one item at QUOTA_BYTES_PER_ITEM (8192).
+    // Validation passes, the write rejects — the path that used to fail
+    // silently, leaving neither "Saved." nor an error on screen.
+    const oversized = `https://example.test/${'x'.repeat(9000)}?q={email}`;
+    await row(page, 0).locator('.template').fill(oversized);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+    // Chrome's own wording for this is `QUOTA_BYTES_PER_ITEM quota
+    // exceeded`, which is not something to show anyone.
+    await expect(page.locator('#status')).toHaveText(
+      'Save failed: The settings are too large to sync',
+    );
+    await expect(page.locator('#status')).toHaveClass(/error/);
+    // Sticky, like the validation errors: a confirmation would have gone
+    // by now.
+    await page.waitForTimeout(3000);
+    await expect(page.locator('#status')).toHaveClass(/error/);
+    // And the stored config is untouched.
+    expect(await config.getTargets()).toEqual([
+      {
+        emailDomain: '',
+        urlTemplate: 'https://example.test/lookup?addr={email}',
+        openDirectly: true,
+      },
+    ]);
+
+    await page.close();
+  });
+
   test('Cancel restores what is stored', async ({
     extensionContext,
     extensionId,

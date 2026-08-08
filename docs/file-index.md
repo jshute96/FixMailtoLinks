@@ -9,15 +9,18 @@ One-line descriptions of every source file, grouped by directory.
 | `README.md` | Primary project documentation: setup, usage, commands |
 | `CLAUDE.md` | Guidance for AI agents working in this repository |
 | `package.json` | Node project manifest, scripts, devDependencies |
+| `package-lock.json` | Pinned dependency tree for `npm install` |
+| `LICENSE` | MIT license |
 | `tsconfig.json` | TypeScript compiler config for the extension build |
 | `tsconfig.tests.json` | Typecheck-only config covering `tests/`, which `tsconfig.json` excludes |
 | `playwright.config.ts` | Playwright test runner config |
 | `.gitignore` | Git ignore rules |
 
-## Claude Commands (`.claude/commands/`)
+## Claude Config (`.claude/`)
 
 | File | Description |
 |------|-------------|
+| `.claude/settings.json` | Claude Code settings checked in for the project |
 | `.claude/commands/codereview.md` | `/codereview` slash command — launches a background review subagent |
 | `.claude/commands/pushreview.md` | `/pushreview` slash command — codereview then commit + push if clean |
 
@@ -37,14 +40,14 @@ One-line descriptions of every source file, grouped by directory.
 
 | File | Description |
 |------|-------------|
-| `scripts/build.mjs` | Cleans `dist/`, copies icons and manifest, then runs `tsc` |
+| `scripts/build.mjs` | Cleans `dist/`, copies icons, manifest and `options.html`, then runs `tsc` |
 
 ## Tests (`tests/`)
 
 | File | Description |
 |------|-------------|
 | `tests/fixtures/extension.ts` | Playwright fixtures: extension-loaded Chromium, page server, and config helper |
-| `tests/fixtures/pages/link_page.html` | Manual/E2E test page with plain, parameterized, nested, `target=_blank`, and dynamic mailto links |
+| `tests/fixtures/pages/link_page.html` | Manual/E2E test page with mailto links in many shapes: plain, parameterized, multi- and no-recipient, nested, dynamic |
 | `tests/fixtures/pages/landing.html` | Trivial navigation target for the click-through test |
 | `tests/fixtures/pages/iframe_page.html` | Test page with mailto links inside `srcdoc` and `about:blank` frames |
 | `tests/e2e/clicks.spec.ts` | E2E specs for click interception: parsing, encoding, modifier clicks, and domain matching |

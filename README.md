@@ -94,8 +94,8 @@ Useful for trying the extension interactively:
 
 - `src/` — TypeScript sources and `manifest.json`
 - `dist/` — built extension (gitignored, loaded unpacked into Chrome)
-- `scripts/build.mjs` — build script (cleans `dist/`, copies icons and
-  manifest, runs `tsc`)
+- `scripts/build.mjs` — build script (cleans `dist/`, copies icons,
+  manifest and `options.html`, runs `tsc`)
 - `tests/e2e/` — Playwright tests
 - `tests/fixtures/extension.ts` — fixtures that load the extension,
   expose its service worker, serve the fixture pages, and reset config

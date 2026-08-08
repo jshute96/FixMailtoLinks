@@ -27,6 +27,13 @@ const TEMPLATE_ERROR =
 const PLACEHOLDER_ERROR =
   'Link targets must include {username} or {email}';
 
+// One message per problem, however many places hit it: both the initial
+// render and Cancel are the same failure, a settings read that didn't
+// come back.
+const READ_ERROR = 'Could not read the saved settings';
+
+const SAVE_ERROR = 'Save failed';
+
 // Confirmations fade on their own; errors stay put until the user does
 // something about them. A message you have to catch within a couple of
 // seconds is no use when it's telling you the save didn't happen.
@@ -37,6 +44,30 @@ function showStatus(msg: string, isError = false): void {
   setTimeout(() => {
     if (statusEl.textContent === msg) clearStatus();
   }, 2500);
+}
+
+// The tail after "Save failed: " or "Could not read the saved settings: ".
+//
+// Chrome's own storage messages are internal vocabulary — too big reads
+// as `Resource::kQuotaBytesPerItem quota exceeded` — so the refusals a
+// user can actually provoke get plain wording, and a capital after the
+// colon like every other message here. Anything else falls back to what
+// was thrown: unhelpful beats silent, and there is no enumerating what a
+// future Chrome might say.
+//
+// The patterns are loose about case and underscores on purpose: the same
+// limit has been spelled both `QUOTA_BYTES_PER_ITEM` and
+// `kQuotaBytesPerItem`, and matching one spelling would leak the other
+// straight through.
+function reasonOf(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  if (/quota_?bytes/i.test(message)) {
+    return 'The settings are too large to sync';
+  }
+  if (/max_?(write|sustained)/i.test(message)) {
+    return 'Too many saves in a row — wait a minute and try again';
+  }
+  return message.trim() || 'Unknown error';
 }
 
 function clearStatus(): void {
@@ -114,7 +145,15 @@ async function save(): Promise<void> {
     }
   }
   const cfg = normalizeConfig(readForm());
-  await saveConfig(cfg);
+  try {
+    await saveConfig(cfg);
+  } catch (err) {
+    // Storage can refuse a write: sync turned off, the per-item size
+    // limit, or the write-rate quota. Say so and leave the form alone —
+    // silently showing nothing would read as a save that worked.
+    showStatus(`${SAVE_ERROR}: ${reasonOf(err)}`, true);
+    return;
+  }
   // Re-render so the trimmed/lower-cased values the user actually saved
   // are what they see.
   renderConfig(cfg);
@@ -153,10 +192,16 @@ addBtn.addEventListener('click', () => {
 saveBtn.addEventListener('click', () => void save());
 
 cancelBtn.addEventListener('click', () => {
-  void loadConfig().then((cfg) => {
-    renderConfig(cfg);
-    showStatus('Changes discarded.');
-  });
+  // Same reasoning as the failed save: discarding means re-reading
+  // storage, and if that read fails the form still shows the edits it
+  // claimed to have thrown away.
+  void loadConfig().then(
+    (cfg) => {
+      renderConfig(cfg);
+      showStatus('Changes discarded.');
+    },
+    (err: unknown) => showStatus(`${READ_ERROR}: ${reasonOf(err)}`, true),
+  );
 });
 
 function testInput(row: HTMLElement): HTMLInputElement {
@@ -181,7 +226,9 @@ function syncTestLink(row: HTMLElement): void {
 function runTest(row: HTMLElement): void {
   const link = testAnchor(row);
   const email = emailFromMailto(link.getAttribute('href') ?? '');
-  if (!email) return;
+  // Only null means "not a mailto: at all"; an empty address is a link
+  // the dialog can still say something useful about.
+  if (email === null) return;
   // Deliberately the *live* form, not storage, so you can try a target
   // out before committing to it. Invalid rows normalize away.
   const cfg = normalizeConfig(readForm());
@@ -212,7 +259,16 @@ for (const row of testRows) {
 
 async function init(): Promise<void> {
   for (const row of testRows) syncTestLink(row);
-  renderConfig(await loadConfig());
+  try {
+    renderConfig(await loadConfig());
+  } catch (err) {
+    // An empty form here means "the read failed", not "no targets
+    // configured" — and saving it would write that empty list over
+    // settings we never managed to see. Say what happened and take Save
+    // away until a reload can read them properly.
+    saveBtn.disabled = true;
+    showStatus(`${READ_ERROR}: ${reasonOf(err)}`, true);
+  }
   // The initial render waits on storage, so tests (and anything else
   // driving this page) need a way to know the form is populated.
   document.body.dataset.ready = 'true';

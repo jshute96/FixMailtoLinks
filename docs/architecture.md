@@ -41,6 +41,34 @@ why so we don't try it again.
 So: the content script isn't an implementation preference — it's the
 only layer where we can meaningfully intervene.
 
+### What a click listener still can't catch
+
+Everything below reaches the OS mail app regardless. All of it is
+accepted; none of it has a fix available at this layer.
+
+- **`mailto:` navigation from script** — a page doing
+  `location.href = 'mailto:…'` from a button. There is no click on a
+  `mailto:` anchor to cancel, and the external-protocol hand-off is
+  invisible to every extension API.
+- **A `mailto:` typed into the address bar**, or opened from another
+  application.
+- **The link's context menu** — *Open link in new tab* / *Copy link
+  address* both give the raw `mailto:`. See *Why not rewrite hrefs*.
+- **Frames the content script can't be injected into** —  a `data:` URL
+  iframe, or a sandboxed frame with an opaque origin.
+  `match_origin_as_fallback` (Chrome 105+) would cover these; it hasn't
+  been judged worth the minimum-version floor.
+
+The alternative that *would* catch the address bar and script-driven
+cases is a web-hosted `mailto` protocol handler
+(`registerProtocolHandler`, the mechanism Gmail uses). Rejected because:
+
+- It needs a page served from a real https origin, which this extension
+  otherwise doesn't have.
+- Registering it takes a user gesture and a permission prompt.
+- It can't navigate in place, and per-domain rules would have to move
+  to that hosted page.
+
 ## Pieces
 
 ### Shared globals, not ES modules
@@ -93,6 +121,16 @@ Link activation reaches two different events, and both are cancelable:
 - **`click`** — primary button, including the Ctrl/Cmd/Shift variants.
 - **`auxclick`** — middle button. Middle-click does *not* fire `click`.
 
+Both are registered on **`window`**, in the capture phase — not on
+`document`:
+
+- Capture reaches `window` first, so a page listener there calling
+  `stopPropagation()` (overlay and analytics libraries do this) would
+  starve a document-level listener, and the `mailto:` would escape.
+- The content script runs at `document_start`, so it is first on the node
+  that sees the event first. Nothing the page registers later can get in
+  front of it.
+
 Both handlers:
 
 - Find the anchor via `composedPath()`, so links inside a page's own
@@ -110,12 +148,59 @@ Both handlers:
 - Ignore the dialog's own `mailto:` bullet, which carries
   `data-fix-mailto-passthrough`.
 - Claim the event outright on a `mailto:` link (`preventDefault` plus
-  `stopPropagation` at document capture), so the page's own handlers
+  `stopPropagation` at window capture), so the page's own handlers
   for that link don't run.
 - Call `preventDefault()` **synchronously**, before any `await`: once
   the handler returns, the browser is free to follow the `mailto:`.
 - Leave Alt-click alone. It means "download the target", which is not
   a navigation to redirect.
+
+#### Links with no single recipient
+
+Two shapes carry no one address to look up, and both are handled the
+same way (`addressCount` in `config.ts` tells them apart):
+
+- **None** — `mailto:?subject=…&body=…`, what "share this page by
+  email" buttons use.
+- **Several** — `mailto:a@x.com,b@y.com`. A `mailto:` may legally list
+  more than one recipient.
+
+Both are **claimed like any other click**. Letting one through opens the
+mail app, which is the one outcome the extension exists to prevent. So
+`emailFromMailto` distinguishes two empty results: `null` means "not a
+`mailto:` at all", `''` means "a `mailto:` with no recipient".
+
+Neither can be looked up, so neither gets a target:
+
+- An empty `emailDomain` matches every *address* — not the absence of
+  one, and not a list of several.
+- A template takes a single address. Substituting a list looks up a
+  person who doesn't exist, and the domain rules could only ever match
+  one of the recipients.
+- `matchingTargets` and `autoTarget` both return nothing, so **open
+  directly never applies** and the dialog always opens.
+
+What the dialog does with them:
+
+- Drops the copy buttons — "Copy username" has no answer for a list, and
+  none at all for an empty link.
+- Says which of the two it is, rather than "no link targets match",
+  which would blame settings that could not have helped.
+- Still offers the hand-off to the mail app, subject and body intact.
+  That is the one thing that behaves correctly either way.
+
+Counting the recipients, which is what the whole rule rests on:
+
+- The set is the **path address plus every `to` hfield**, comma-joined —
+  RFC 6068 allows either or both, so `mailto:a@x.com?to=b@y.com` names
+  two people. Reading one source alone would look someone up and drop
+  the rest silently.
+- The query is split by hand rather than with `URLSearchParams`, which
+  would read a `+` in a local part as a space.
+- Splitting the list ignores commas inside quotes or angle brackets. The
+  href is percent-decoded first, so a `%2C` in a quoted local part is a
+  literal comma by then, and `"Smith, Eve" <eve@example.com>` is one
+  recipient however it was written.
 
 #### Where the destination opens
 
@@ -250,6 +335,10 @@ What that costs, and is accepted:
   normally. `openInNewTab` puts `target="_blank"` on the *target* links
   only — never on the `mailto:` bullet, where the handoff to the email
   app would strand an empty tab.
+- Escape is listened for on the **window**, in capture, for the same
+  reason the click listeners are: a page listener there calling
+  `stopPropagation()` would otherwise leave the dialog with no keyboard
+  way out.
 - Rendered into an open shadow root so page CSS can't restyle or hide
   it, and page scripts querying the DOM don't trip over our nodes.
   `:host` carries the fixed, viewport-filling box — `all: initial`
@@ -263,6 +352,18 @@ What that costs, and is accepted:
 - Clipboard writes go through `navigator.clipboard`, falling back to a
   hidden textarea plus `document.execCommand('copy')` where the async
   API is denied (permissions policy, unfocused frame).
+- For a link with no single recipient the copy buttons are omitted and
+  the empty-list line names the reason (no address, or several) rather
+  than saying no target matched — only that last one is something the
+  user could configure their way out of.
+
+Known gaps, none of them yet judged worth the code:
+
+- No `aria-labelledby` on the panel, no focus trap (Tab walks into the
+  page behind the overlay), and focus isn't returned to the clicked link
+  on close.
+- Light palette only — no `prefers-color-scheme` handling, so it glares
+  on a dark page.
 
 ### Background service worker (`src/background.ts`)
 
@@ -292,7 +393,20 @@ What that costs, and is accepted:
   - Confirmations fade after a moment; errors stay until the user edits
     a row. A message you have to catch within seconds is no use when
     it's saying the save didn't happen.
-- **Cancel** re-reads storage into the form, discarding edits.
+  - A write that storage *refuses* — sync off, the per-item size cap,
+    the write-rate quota — shows `Save failed: <reason>` in the same
+    place, equally sticky. Showing nothing would read as a save that
+    worked.
+  - The two refusals a user can provoke are reworded: Chrome says
+    `QUOTA_BYTES_PER_ITEM quota exceeded`, which is not a sentence to
+    show anyone. Anything else falls back to what was thrown.
+- **Cancel** re-reads storage into the form, discarding edits, and
+  reports a failed read the same way: the form would otherwise still be
+  showing the edits it claimed to have discarded.
+- **A failed read at load** shows the same message and **disables
+  Save**. An empty form there means the read failed, not that no targets
+  are configured — and saving it would write that empty list over
+  settings nobody ever saw. A reload is the way out.
 - Each row's move-up/move-down button is disabled at the end of the
   list it can't move past.
 - Sets `data-ready` on `<body>` once the first render completes, since
@@ -348,6 +462,9 @@ A config is an **ordered list of targets**. Each target has:
 - If no automatic target matches, the dialog opens listing **all**
   matching targets in order.
 - An empty target list is legitimate: it means "always ask".
+- A link with **no address**, or with **several**, matches nothing
+  whatever is configured, and is never opened directly — see *Links with
+  no single recipient*.
 
 ### URL template format
 
@@ -404,6 +521,23 @@ A config is an **ordered list of targets**. Each target has:
 - Domains are normalized rather than rejected: `@abc.com`, `*.abc.com`
   and `ABC.com.` all mean `abc.com`, and rejecting input that obviously
   expresses the right intent would just be rude.
+
+## Permissions and exposure
+
+- `storage` is the **only** permission requested. Host access comes from
+  the content script's `<all_urls>` match, and nothing is ever read out
+  of a page — see *Passive by default*.
+- `web_accessible_resources` exposes `icons/icon-48.png` to every
+  origin, because the dialog renders into the page's document and the
+  page has to be allowed to load it.
+  - That makes the extension **detectable**: any page can probe
+    `chrome-extension://<id>/icons/icon-48.png`.
+  - `use_dynamic_url` would hide it, but `chrome.runtime.getURL` returns
+    the static URL, which is what the dialog's `<img>` uses — so it
+    would cost the icon. Accepted as-is.
+- Messages are only receivable from the extension's own contexts: there
+  is no `externally_connectable`, so no web page can talk to the service
+  worker directly.
 
 ## Storage layout
 
@@ -483,8 +617,10 @@ real browser.
     Ctrl/middle/Shift-click point at the local fixture server instead,
     which needs no interception.
 - **The content script calls `stopPropagation()`** on clicks it claims.
-  A probe listener must be a *capture* listener on `document` — the
-  same node — to still see those events.
+  A probe listener must be a *capture* listener on `window` — the same
+  node — to still see those events. On `document` it sees only the
+  clicks the extension passed through, which reads as a pass for the
+  wrong reason.
 - **`chrome.storage.sync` rations writes** (`MAX_WRITE_OPERATIONS_PER_MINUTE`,
   120). The `config` fixture resets before *and* after every test, so an
   unconditional remove blows the quota once the suite is big enough and

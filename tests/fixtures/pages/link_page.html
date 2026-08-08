@@ -75,6 +75,33 @@
       </li>
     </ul>
 
+    <h2>Links with no single recipient</h2>
+    <p>
+      No one address to look up, so no target can apply: these always
+      open the dialog, which offers only the hand-off to the email app.
+    </p>
+    <ul>
+      <li>
+        <!-- The "share this page by email" shape. No address to look up,
+             but still a link that must not reach the email app. -->
+        <a href="mailto:?subject=Check%20this%20out&amp;body=Have%20a%20look"
+          >Share this page (no recipient)</a
+        >
+      </li>
+      <li>
+        <!-- Several recipients, comma-separated. A template takes one
+             address, and the domain rules could only match one of them. -->
+        <a href="mailto:alice@example.com,bob@example.org"
+          >Alice and Bob (two recipients)</a
+        >
+      </li>
+      <li>
+        <!-- RFC 6068 allows the recipient as a `to` header instead. This
+             one names exactly one, so it behaves like any other link. -->
+        <a href="mailto:?to=zoe@example.com&amp;subject=Hi">Zoe (recipient in the query)</a>
+      </li>
+    </ul>
+
     <h2>Page-requested new tab</h2>
     <p>
       <a href="mailto:heidi@example.com" target="_blank">Heidi (target=_blank)</a>

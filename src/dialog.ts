@@ -13,7 +13,9 @@ interface MailtoDialogOptions {
   // small same-origin iframe renders the dialog in the top document, so
   // it isn't clipped to the frame.
   doc: Document;
-  // Address as parsed from the link, e.g. `alice@example.com`.
+  // Address as parsed from the link, e.g. `alice@example.com`. May name
+  // no recipient (`mailto:?subject=…`) or several (`a@x.com,b@y.com`),
+  // either of which drops the copy buttons and the target list.
   email: string;
   // The original, unmodified mailto: href, so "open in your email app"
   // keeps any ?subject/&body the page supplied.
@@ -123,6 +125,15 @@ const DIALOG_STYLE = `
   .status { color: #2a7a2a; font-size: 0.85rem; }
 `;
 
+// Shown under "Open with" when there is nothing to list, keyed by why.
+// A single address that simply matched no rule is the one case the user
+// can do something about; the other two are properties of the link.
+const EMPTY_MESSAGE: Record<AddressCount, string> = {
+  one: 'No link targets match this address.',
+  none: "This link has no email address, so the links don't work.",
+  multiple: "This link has multiple email addresses, so the links don't work.",
+};
+
 // Set by the dialog on its own "open in your email app" link, which is a
 // real mailto: anchor and would otherwise re-trigger the dialog. Declared
 // here because this is the file that writes it; content.js reads it.
@@ -227,9 +238,16 @@ function showMailtoDialog(opts: MailtoDialogOptions): void {
   overlay.appendChild(panel);
   root.appendChild(overlay);
 
+  // Escape is listened for on the window, in capture, for the same
+  // reason the content script's click listeners are (see content.ts): a
+  // page listener there that calls stopPropagation() would otherwise
+  // leave the dialog with no way to close from the keyboard. Falls back
+  // to the document for a document with no view, which shouldn't happen
+  // but costs one `??` to survive.
+  const keys: EventTarget = doc.defaultView ?? doc;
   const close = (): void => {
     if (activeClose === close) activeClose = null;
-    doc.removeEventListener('keydown', onKeydown, true);
+    keys.removeEventListener('keydown', onKeydown as EventListener, true);
     host.remove();
   };
   function onKeydown(e: KeyboardEvent): void {
@@ -238,7 +256,7 @@ function showMailtoDialog(opts: MailtoDialogOptions): void {
     // without our close() ever running. Nothing else can reach that
     // instance, so stand down the first time we notice it's gone.
     if (!host.isConnected) {
-      doc.removeEventListener('keydown', onKeydown, true);
+      keys.removeEventListener('keydown', onKeydown as EventListener, true);
       return;
     }
     if (e.key === 'Escape') {
@@ -246,7 +264,7 @@ function showMailtoDialog(opts: MailtoDialogOptions): void {
       close();
     }
   }
-  doc.addEventListener('keydown', onKeydown, true);
+  keys.addEventListener('keydown', onKeydown as EventListener, true);
   activeClose = close;
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) close();
@@ -274,27 +292,32 @@ function showMailtoDialog(opts: MailtoDialogOptions): void {
   address.textContent = displayMailto(mailtoHref);
   panel.appendChild(address);
 
-  const status = doc.createElement('span');
-  status.className = 'status';
+  // Both buttons take a single address — "Copy username" has no answer
+  // for a list, and none at all for an empty link — so they are left out
+  // rather than offered and producing nonsense.
+  if (hasOneAddress(email)) {
+    const status = doc.createElement('span');
+    status.className = 'status';
 
-  const buttons = doc.createElement('div');
-  buttons.className = 'buttons';
-  for (const [label, value] of [
-    ['Copy username', emailUsernameOf(email)],
-    ['Copy email address', bareAddress(email)],
-  ] as const) {
-    const btn = doc.createElement('button');
-    btn.type = 'button';
-    btn.textContent = label;
-    btn.addEventListener('click', () => {
-      void copyText(doc, value).then((ok) => {
-        status.textContent = ok ? 'Copied' : 'Copying failed';
+    const buttons = doc.createElement('div');
+    buttons.className = 'buttons';
+    for (const [label, value] of [
+      ['Copy username', emailUsernameOf(email)],
+      ['Copy email address', bareAddress(email)],
+    ] as const) {
+      const btn = doc.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        void copyText(doc, value).then((ok) => {
+          status.textContent = ok ? 'Copied' : 'Copying failed';
+        });
       });
-    });
-    buttons.appendChild(btn);
+      buttons.appendChild(btn);
+    }
+    buttons.appendChild(status);
+    panel.appendChild(buttons);
   }
-  buttons.appendChild(status);
-  panel.appendChild(buttons);
 
   const targetsHeading = doc.createElement('h3');
   targetsHeading.textContent = 'Open with';
@@ -303,7 +326,12 @@ function showMailtoDialog(opts: MailtoDialogOptions): void {
   if (targets.length === 0) {
     const empty = doc.createElement('p');
     empty.className = 'empty';
-    empty.textContent = 'No link targets match this address.';
+    // Why the list is empty decides what to say. Only a single address
+    // that matched no rule is something the user can act on; a link with
+    // no address, or several, could not have matched whatever they
+    // configure, so don't word it as though their settings were at
+    // fault.
+    empty.textContent = EMPTY_MESSAGE[addressCount(email)];
     panel.appendChild(empty);
   }
 

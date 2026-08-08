@@ -108,7 +108,9 @@ function activatedEmail(
   // dialog's verbatim hand-off.
   const href = a.href;
   const email = emailFromMailto(href);
-  return email ? { a, email, href } : null;
+  // Null, not falsy: an empty address means a mailto: link with no
+  // recipient, which is still a click to claim. See emailFromMailto.
+  return email === null ? null : { a, email, href };
 }
 
 function openModeFor(e: MouseEvent, a: HTMLAnchorElement): OpenMode | null {
@@ -241,10 +243,15 @@ function onActivate(e: MouseEvent): void {
   void configReady().then((cfg) => act(cfg, a, email, href, mode));
 }
 
-// Warm the config as soon as a pointer goes down on a mailto: link — any
-// button, so a right-click that ends in "open in new tab" is covered too
-// — so the activation that follows can decide synchronously and act
-// without a visible pause.
+// Warm the config as soon as a pointer goes down on a mailto: link, so
+// the activation that follows can decide synchronously and act without a
+// visible pause. Covers both activation paths: the primary button's
+// `click` and the middle button's `auxclick`.
+//
+// Not filtered by button. A right-click warms the config for nothing —
+// the context menu can't be intercepted at all, so nothing follows — but
+// that costs one storage read per frame, which is cheaper than a button
+// test is worth.
 //
 // Passive: cancelling pointerdown suppresses the whole mousedown/click
 // sequence, and we only want to observe it.
@@ -254,9 +261,16 @@ function onPointerDown(e: PointerEvent): void {
   void configReady();
 }
 
-document.addEventListener('pointerdown', onPointerDown, {
+// Registered on `window`, not `document`, and in the capture phase.
+// Capture runs window first, so a page listener there that calls
+// stopPropagation() — overlay and analytics libraries do this — would
+// starve a document-level listener and let the mailto: reach the OS mail
+// app. Nothing the page registers can pre-empt these: the content script
+// runs at document_start, so it is first on the node that sees the event
+// first.
+window.addEventListener('pointerdown', onPointerDown, {
   capture: true,
   passive: true,
 });
-document.addEventListener('click', onActivate, true);
-document.addEventListener('auxclick', onActivate, true);
+window.addEventListener('click', onActivate, true);
+window.addEventListener('auxclick', onActivate, true);

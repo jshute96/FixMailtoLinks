@@ -94,6 +94,64 @@ function emailDomainOf(email: string): string {
   return at < 0 ? '' : addr.slice(at + 1).trim().toLowerCase();
 }
 
+// Split a comma-separated recipient list, ignoring commas that aren't
+// separators. Both exceptions turn up in real links:
+//   - inside a quoted local part — RFC 6068 requires `%2C` there, but
+//     the href is percent-decoded before this sees it, so the comma is
+//     literal again by now.
+//   - inside a display name — `"Smith, Eve" <eve@example.com>`, which is
+//     how mail clients write a surname-first name.
+// Splitting naively would read either as two recipients and send a
+// perfectly ordinary link to the dialog.
+function splitAddresses(list: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let quoted = false;
+  let angled = false;
+  for (const ch of list) {
+    if (ch === ',' && !quoted && !angled) {
+      parts.push(current);
+      current = '';
+      continue;
+    }
+    if (ch === '"' && !angled) quoted = !quoted;
+    else if (ch === '<' && !quoted) angled = true;
+    else if (ch === '>' && !quoted) angled = false;
+    current += ch;
+  }
+  parts.push(current);
+  return parts;
+}
+
+// The recipients a mailto: link names, in order, each reduced to a bare
+// address. Empty entries — a trailing comma, or a path that was only
+// whitespace — are dropped.
+function addressList(email: string): string[] {
+  return splitAddresses(email)
+    .map((part) => bareAddress(part))
+    .filter((part) => part !== '');
+}
+
+// How many recipients there are to look up. Only `one` can be, which is
+// why this exists rather than a plain emptiness test:
+//   - `none`     — `mailto:?subject=…`, the "share this page" shape.
+//   - `multiple` — `mailto:a@x.com,b@y.com`. A template takes a single
+//     address, so substituting a list produces a lookup for a person who
+//     doesn't exist, and the domain rules can only match one of them.
+// Both leave nothing a target could sensibly do, so both always get the
+// dialog, which says so and hands off to the email app instead.
+type AddressCount = 'none' | 'one' | 'multiple';
+
+function addressCount(email: string): AddressCount {
+  const addresses = addressList(email);
+  if (addresses.length === 0) return 'none';
+  return addresses.length === 1 ? 'one' : 'multiple';
+}
+
+function hasOneAddress(email: string): boolean {
+  return addressCount(email) === 'one';
+}
+
 // The part before the `@`. Used for `{username}` templates, which is
 // what corporate people-directory lookups usually want.
 function emailUsernameOf(email: string): string {
@@ -126,6 +184,15 @@ function targetMatches(target: TargetConfig, email: string): boolean {
 // query, so escaping it only makes the URL uglier in the address bar for
 // no gain. encodeURIComponent escapes it because it is written for the
 // general case, so put it back.
+//
+// The one place a bare `@` changes a URL's meaning is inside the
+// authority, where it starts the userinfo field: a template shaped
+// `https://{username}.corp.example.com/` given `evil@attacker.test`
+// resolves as user `evil` at `attacker.test.corp.example.com`. That is
+// still a subdomain of the template's own domain, and `/`, `?` and `#`
+// stay encoded so the authority can't be closed early either — so the
+// destination remains wherever the template pointed, and the worst case
+// is a confusing address bar. Left readable on that basis.
 function encodeForUrl(value: string): string {
   return encodeURIComponent(value).replace(/%40/g, '@');
 }
@@ -138,8 +205,12 @@ function expandTemplate(template: string, email: string): string {
 }
 
 // Every target that applies to this address, in configured order. This
-// is what the chooser dialog lists.
+// is what the chooser dialog lists. Nothing matches unless the link
+// names exactly one recipient — an empty-domain target matches every
+// *address*, not the absence of one or a list of several. See
+// addressCount.
 function matchingTargets(cfg: Config, email: string): TargetConfig[] {
+  if (!hasOneAddress(email)) return [];
   return cfg.targets.filter((t) => targetMatches(t, email));
 }
 
@@ -148,6 +219,9 @@ function matchingTargets(cfg: Config, email: string): TargetConfig[] {
 // entry that only wants to appear in the dialog shouldn't suppress a
 // later one that wants to be followed straight away.
 function autoTarget(cfg: Config, email: string): TargetConfig | null {
+  // Never open directly without exactly one address to look up: see
+  // addressCount. The dialog is the only sensible answer there.
+  if (!hasOneAddress(email)) return null;
   return (
     cfg.targets.find((t) => t.openDirectly && targetMatches(t, email)) ??
     null
@@ -200,17 +274,52 @@ async function saveConfig(cfg: Config): Promise<void> {
   await chrome.storage.sync.set({ [STORAGE_KEY]: cfg });
 }
 
+function decodePercent(raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+// The `to` hfields of a mailto: query, comma-joined into the same shape
+// an address list takes in the path. A query may carry more than one.
+//
+// Parsed by hand rather than with URLSearchParams, which reads `+` as a
+// space; `+` is legal in a local part, and the address-part path keeps
+// it verbatim. Header names are case-insensitive.
+function recipientHeaders(query: string): string {
+  const found: string[] = [];
+  for (const part of query.split('&')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).toLowerCase() !== 'to') continue;
+    const value = decodePercent(part.slice(eq + 1)).trim();
+    if (value) found.push(value);
+  }
+  return found.join(',');
+}
+
 // Extract the address from a mailto: href, dropping any ?subject/&body
-// parameters. Returns null for anything that isn't a usable mailto:.
+// parameters.
+//
+// Two distinct "no address" results, and the difference is load-bearing:
+//   - null — not a mailto: link at all, so not ours to intercept.
+//   - ''   — a mailto: link that names no recipient, e.g.
+//            `mailto:?subject=…`, the shape "share this by email"
+//            buttons use. There is nothing to look up, but the click
+//            still has to be claimed: letting it through opens the OS
+//            mail app, which is the one outcome this extension exists to
+//            prevent.
 function emailFromMailto(href: string): string | null {
   if (!href.toLowerCase().startsWith('mailto:')) return null;
   const rest = href.slice('mailto:'.length);
   const q = rest.indexOf('?');
-  const addr = (q >= 0 ? rest.slice(0, q) : rest).trim();
-  if (!addr) return null;
-  try {
-    return decodeURIComponent(addr);
-  } catch {
-    return addr;
-  }
+  const addr = decodePercent((q >= 0 ? rest.slice(0, q) : rest).trim()).trim();
+  // RFC 6068 puts the recipients in the path, in `to` headers, or both —
+  // `mailto:alice@x.com?to=bob@y.com` names two people. Joining rather
+  // than preferring one is what keeps addressCount from reading that as
+  // a single recipient and quietly dropping the other.
+  const headers = q >= 0 ? recipientHeaders(rest.slice(q + 1)) : '';
+  return [addr, headers].filter((part) => part !== '').join(',');
 }
