@@ -66,7 +66,14 @@ const DIALOG_STYLE = `
     overflow: auto;
     box-sizing: border-box;
   }
-  h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+  h2 {
+    font-size: 1.05rem;
+    margin: 0 0 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  h2 img { width: 1.5em; height: 1.5em; }
   .address {
     font-family: ui-monospace, monospace;
     background: #f2f2f2;
@@ -185,6 +192,18 @@ function extensionName(): string {
   }
 }
 
+// The dialog renders into the page's document, so the page has to be
+// allowed to load the icon — hence the manifest's
+// web_accessible_resources entry. Returns null if that lookup fails, so
+// a missing icon costs us the image and not the whole heading.
+function extensionIconUrl(): string | null {
+  try {
+    return chrome.runtime.getURL('icons/icon-48.png');
+  } catch {
+    return null;
+  }
+}
+
 function showMailtoDialog(opts: MailtoDialogOptions): void {
   const { doc, email, mailtoHref, targets } = opts;
   // Never stack dialogs: a second click while one is open replaces it.
@@ -234,7 +253,16 @@ function showMailtoDialog(opts: MailtoDialogOptions): void {
   });
 
   const heading = doc.createElement('h2');
-  heading.textContent = extensionName();
+  const iconUrl = extensionIconUrl();
+  if (iconUrl) {
+    const icon = doc.createElement('img');
+    icon.src = iconUrl;
+    // Decorative: the name sits right beside it, so announcing the icon
+    // too would just repeat it.
+    icon.alt = '';
+    heading.appendChild(icon);
+  }
+  heading.appendChild(doc.createTextNode(extensionName()));
   panel.appendChild(heading);
 
   const linkHeading = doc.createElement('h3');

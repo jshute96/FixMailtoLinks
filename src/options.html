@@ -14,6 +14,14 @@
       h1 {
         font-size: 1.25rem;
       }
+      /* Only the page title carries the icon, so scope this to the icon
+         itself rather than every h1. */
+      h1 .icon {
+        vertical-align: -0.15em;
+        margin-right: 0.4rem;
+        width: 1.5em;
+        height: 1.5em;
+      }
       h2 {
         font-size: 1.05rem;
         margin-top: 2rem;
@@ -164,7 +172,10 @@
     </style>
   </head>
   <body>
-    <h1>Fix Mailto Links — Options</h1>
+    <h1>
+      <img class="icon" src="icons/icon-48.png" alt="" />Fix Mailto Links —
+      Options
+    </h1>
     <p>
       This extension redirects <code>mailto:</code> links to chosen target
       sites, or opens a dialog box where you can pick.
