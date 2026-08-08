@@ -79,6 +79,11 @@ export interface ConfigApi {
 const STORAGE_KEY = 'config';
 export const DEFAULT_TEMPLATE = 'https://www.google.com/search?q={email}';
 
+// Hosts the tests point their templates at, plus the fixture page's
+// non-mailto control link. Every one of them is served a stub page;
+// nothing here should ever hit the real network.
+const STUB_HOSTS = /^https:\/\/(example\.test|example\.com|www\.google\.com)\//;
+
 export function catchAll(urlTemplate: string): TestTarget {
   return { emailDomain: '', urlTemplate, openDirectly: true };
 }
@@ -105,9 +110,17 @@ function makeConfigApi(getServiceWorker: GetServiceWorker): ConfigApi {
         return stored[key]?.targets as TestTarget[] | undefined;
       }, STORAGE_KEY);
     },
+    // Skips the write when there is nothing stored. `chrome.storage.sync`
+    // enforces MAX_WRITE_OPERATIONS_PER_MINUTE (120), and the config
+    // fixture resets both before and after every test — so with a suite
+    // this size an unconditional remove blows the quota and fails a
+    // random test. Reads are not rationed the same way.
     async reset() {
       const sw = await getServiceWorker();
-      await sw.evaluate((key) => chrome.storage.sync.remove(key), STORAGE_KEY);
+      await sw.evaluate(async (key) => {
+        const stored = await chrome.storage.sync.get(key);
+        if (key in stored) await chrome.storage.sync.remove(key);
+      }, STORAGE_KEY);
     },
   };
   return api;
@@ -161,6 +174,17 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           `--load-extension=${EXTENSION_PATH}`,
         ],
       });
+      // Clicking a link is the only way to observe where it goes, so the
+      // tests really do navigate to their configured targets. Stub the
+      // destination hosts rather than reaching the network. Routed on the
+      // *context* so tabs and windows opened by Ctrl-click / middle-click
+      // are covered too, not just the opener.
+      await ctx.route(STUB_HOSTS, (route) =>
+        route.fulfill({
+          contentType: 'text/html; charset=utf-8',
+          body: '<!doctype html><title>stub</title><p id="stub">stub target</p>',
+        }),
+      );
       await use(ctx);
       await ctx.close();
     },

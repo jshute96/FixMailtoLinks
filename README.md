@@ -1,8 +1,11 @@
 # ![icon](src/icons/icon-48.png) Fix Mailto Links Chrome Extension
 
-This chrome extension rewrites `mailto:` links into normal links
-to configured target pages, or opens a dialog box where you can pick
-a target page or copy the email address.
+Mailto links are annoying. I never want to open an email app outside the browser,
+or slowly start another gmail tab.
+
+This chrome extension redirects clicks on `mailto:` links to configured
+target pages instead of your email app, or opens a dialog box where
+you can pick the target page or copy the email address.
 
 Typically, you might prefer linking into your people directory rather than
 opening an email client.

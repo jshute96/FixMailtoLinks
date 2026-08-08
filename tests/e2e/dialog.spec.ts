@@ -31,8 +31,8 @@ test.describe('chooser dialog', () => {
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
-    // The href stays as mailto: — the click handler, not a rewrite, is
-    // what stops the email app from opening.
+    // The href is left exactly as the page wrote it — cancelling the
+    // click, not changing the link, is what stops the email app.
     await expect(
       page.getByRole('link', { name: 'alice@example.com' }),
     ).toHaveAttribute('href', 'mailto:alice@example.com');
@@ -281,9 +281,6 @@ test.describe('chooser dialog', () => {
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
-    await expect(
-      page.getByRole('link', { name: 'alice@example.com' }),
-    ).toHaveAttribute('href', /landing\.html/);
     await page.getByRole('link', { name: 'alice@example.com' }).click();
 
     await page.waitForURL(/landing\.html/);

@@ -13,11 +13,10 @@ High-level design of the Fix Mailto Links extension.
 
 ## Why a content script (and not `declarativeNetRequest`)
 
-We rewrite `href` attributes in the page via an injected content
-script. The obvious-looking alternative — a
-`declarativeNetRequest` (DNR) redirect rule that matches
-`^mailto:...` — does not work, and it's worth capturing why so we
-don't try it again.
+We intercept clicks in the page via an injected content script. The
+obvious-looking alternative — a `declarativeNetRequest` (DNR) redirect
+rule matching `^mailto:...` — does not work, and it's worth capturing
+why so we don't try it again.
 
 - **`mailto:` clicks are not network requests.** Chrome treats
   `mailto:` as an external protocol. When the user clicks a
@@ -34,10 +33,10 @@ don't try it again.
   the external-protocol handoff bypasses. None of them fire for
   `mailto:`.
 - **The DOM is the only interception point that actually fires.**
-  The `href` attribute is resolved by the renderer, in the page, at
-  click time. Rewriting it there (or intercepting the click) is the
-  only mechanism available to an extension that reliably changes
-  what happens when a `mailto:` link is clicked.
+  The `href` is resolved by the renderer, in the page, at click
+  time. Cancelling that click (or rewriting the `href` beforehand)
+  is the only mechanism available to an extension that reliably
+  changes what happens when a `mailto:` link is clicked.
 
 So: the content script isn't an implementation preference — it's the
 only layer where we can meaningfully intervene.
@@ -69,58 +68,160 @@ only layer where we can meaningfully intervene.
   no URL of their own — `about:blank` and `srcdoc` iframes, which
   inherit their parent's origin. Some embeds build their content
   that way; without this they'd be skipped entirely.
-- Loads the saved config from `chrome.storage.sync`, normalizing it
-  (see *Configuration*) rather than trusting the stored value.
-- Listens for `chrome.storage.onChanged` so that saving new targets in
-  the options page updates already-open tabs without a reload.
 
-#### Two mechanisms, because there are two outcomes
+#### Passive by default
 
-- **A matching automatic target** is baked into the `href`. Hover,
-  middle-click and copy-link-address then all show the real
-  destination.
-  - On first run it walks the DOM and rewrites all
-    `a[href^="mailto:"]` anchors.
-  - A `MutationObserver` catches links added later by SPAs or async
-    renders, and re-rewrites if a page swaps `href` back to `mailto:`.
-- **No matching automatic target** leaves the `href` as `mailto:`, and
-  a capture-phase `click` listener on the document opens the chooser
-  dialog instead.
-  - The listener bows out for modified clicks (Ctrl/Cmd/Shift/Alt,
-    non-primary button), so "open in new tab" still works.
-  - On a `mailto:` link it does claim the event outright
-    (`stopPropagation` at document capture), so the page's own click
-    handlers on that link don't run.
-  - It finds the anchor via `composedPath()`, so links inside a page's
-    own shadow DOM are covered.
-  - It is registered **before** the config load is awaited. Reading
-    storage takes long enough at `document_start` that a click can land
-    first, and an unintercepted one hands off to the OS mail app.
-  - It re-checks for an automatic target before showing the dialog,
-    since it can run before the config has arrived, or on an anchor
-    added between the first rewrite pass and the observer starting.
+The page is never read, written, or observed until the user acts. All
+the script does at `document_start` is register three listeners.
 
-#### Tracking the original address
+- A page with no `mailto:` links — the normal case — is left
+  byte-identical, and never triggers a storage read.
+- No `MutationObserver`, so links added later by SPAs or async
+  renders need no special handling: the listeners are delegated on
+  the document and see them for free.
+- The `href` is read at click time, so a link the page repoints at
+  `mailto:` later is picked up with no bookkeeping.
 
-- Stashes the original `mailto:` href on a
-  `data-fix-mailto-original` attribute so a config change can
-  re-derive the email instead of re-parsing the rewritten URL.
-- If the new config has nothing to open directly, the attribute
-  is dropped and the `mailto:` href restored.
-- If a page repoints an already-rewritten link at some other
-  non-`mailto:` URL, the observer **drops** that attribute. Keeping
-  it would let the next config change re-derive the old address
-  and clobber the href the page deliberately set.
-- Our own rewrites reach that same code path, so the observer only
-  drops the attribute when the current href differs from what the
-  current config produces for the stashed address.
-- The observer reads the element's *live* href, not the value in the
-  mutation record: records arrive in batches, so by delivery time the
-  element and the active config may both have moved on.
-- `setHref()` never writes a value that is already there.
-  `setAttribute` queues a mutation record even for an unchanged value,
-  and the observer reacts to href changes — a no-op write would feed
-  itself forever.
+This replaced an earlier design that rewrote every `mailto:` href up
+front and kept it current with a `MutationObserver`. See *Why not
+rewrite hrefs* below.
+
+#### Interception points
+
+Link activation reaches two different events, and both are cancelable:
+
+- **`click`** — primary button, including the Ctrl/Cmd/Shift variants.
+- **`auxclick`** — middle button. Middle-click does *not* fire `click`.
+
+Both handlers:
+
+- Find the anchor via `composedPath()`, so links inside a page's own
+  shadow DOM are covered.
+- Test `a.href`, the **resolved** URL, not the raw attribute. Chrome
+  strips leading/trailing whitespace and embedded tabs and newlines
+  before resolving, so `  mailto:x@y.com` and even `mai<TAB>lto:x@y.com`
+  are links it will hand to the mail app.
+  - Under the old design missing one was only a skipped rewrite, and the
+    click listener caught it anyway. Now the parse is the only defence,
+    so a miss is an escape.
+  - Resolving lower-cases the scheme and leaves the rest alone, so
+    percent-encoding and the address's own case survive for the dialog's
+    verbatim hand-off.
+- Ignore the dialog's own `mailto:` bullet, which carries
+  `data-fix-mailto-passthrough`.
+- Claim the event outright on a `mailto:` link (`preventDefault` plus
+  `stopPropagation` at document capture), so the page's own handlers
+  for that link don't run.
+- Call `preventDefault()` **synchronously**, before any `await`: once
+  the handler returns, the browser is free to follow the `mailto:`.
+- Leave Alt-click alone. It means "download the target", which is not
+  a navigation to redirect.
+
+#### Where the destination opens
+
+The modifier decides, mirroring what it would have done on an
+ordinary link:
+
+| Click | Opens in |
+| --- | --- |
+| plain | current frame (`location.href`) |
+| plain, `target="_blank"` | new tab, in front |
+| plain, `target="_top"` / `_parent` | that frame |
+| Ctrl / Cmd | background tab |
+| middle | background tab |
+| Shift | new window |
+
+The `target` cases exist because following the `href` used to honour
+them for free:
+
+- Without them a targeted `mailto:` link navigates whatever frame it
+  happens to sit in, which for an ad-style iframe is the wrong one.
+- **Not supported**: named targets (`target="frame-name"`) and
+  `<base target>`. `a.target` doesn't reflect `<base>`, and resolving a
+  frame by name is more machinery than a `mailto:` link has needed.
+  Both fall back to the current frame.
+- Navigating a cross-origin ancestor can be refused; that falls back to
+  the current frame rather than swallowing the click.
+
+How the new tab or window is opened:
+
+- By the **service worker** (`chrome.tabs.create` /
+  `chrome.windows.create`), not `window.open`. `window.open` focuses
+  what it opens, whereas Ctrl-click and middle-click open a tab in the
+  *background*. The worker also knows the opener's position, so the new
+  tab lands next to it.
+- Only for **trusted** events. `chrome.tabs.create` is not gated on user
+  activation the way `window.open` is, so without an `isTrusted` check a
+  page could dispatch synthetic Ctrl-clicks at its own `mailto:` links
+  and spawn tabs without limit. An untrusted click still navigates,
+  which is what following a rewritten `href` used to do.
+- If there is no automatic target, a click that asked to open elsewhere
+  still gets the dialog — the request is remembered, and the target the
+  user picks opens in a new tab. All three away-from-here modes collapse
+  to one there: the dialog's links can carry `target`, but not
+  "background" or "new window".
+
+#### Loading the config
+
+- Read from `chrome.storage.sync` at most once per frame, and only
+  once the user has shown interest in a `mailto:` link.
+- Prefetched on `pointerdown` over such a link, so the `click` that
+  follows can usually decide synchronously and navigate with no pause.
+  That listener is `passive` — cancelling `pointerdown` would suppress
+  the whole mousedown/click sequence.
+- When the prefetch hasn't happened (keyboard activation) or hasn't
+  resolved, the handler cancels the event first and awaits the load.
+- After the first read, a `chrome.storage.onChanged` listener keeps the
+  cached value current, so saving new targets in the options page
+  affects already-open tabs without a reload.
+- If storage is unreachable — the extension was reloaded while the page
+  stayed open — the frame falls back to "no targets", which still gets
+  the user a dialog rather than a click that does nothing.
+  - The fallback wraps the *whole* chain, listener registration
+    included. In that state every `chrome.storage` call throws, so a
+    guard around only the read would let the failure through and leave
+    the frame permanently unable to handle a click.
+  - The `onChanged` listener is registered **before** the read starts,
+    so a save landing mid-read isn't missed, and the newer value isn't
+    overwritten by the older one the read returns.
+
+#### Why not rewrite hrefs
+
+The original design baked the destination into the `href`. That made
+hover, middle-click and copy-link-address all show the real URL for
+free.
+
+It was dropped because the machinery it needed was out of proportion to
+what it bought:
+
+- A document-wide `MutationObserver` on every frame of every page,
+  including the overwhelming majority with no `mailto:` links at all.
+- Attribute bookkeeping (`data-fix-mailto-original`) to re-derive the
+  address on a config change, plus the rules for when to abandon a link
+  the page had repointed itself.
+- A feedback-loop hazard: the observer watched `href` changes and the
+  rewriter wrote them.
+
+The observer's cost was measured before removing it, on pages with no
+`mailto:` links. Method: a one-off Playwright harness (not kept in the
+repo) timing synthetic DOM churn with the observer attached vs not, and
+page loads with the unpacked extension loaded vs not.
+
+- ~8 ms per 40,000 nodes inserted, of which ~5 ms was the callback and
+  the rest mutation recording.
+- Under 1 ms at realistic SPA render sizes (10k nodes and below).
+- No page-load delta outside run-to-run noise, at 0, 5 and 30 frames.
+
+So the performance cost was small. It was the complexity, not the
+milliseconds, that decided this.
+
+What that costs, and is accepted:
+
+- Hovering shows `mailto:…` in the status bar, not the destination.
+- Right-click → *Copy link address* / *Open link in new tab* give the
+  `mailto:`. A context menu can't be intercepted from a click handler,
+  and adding the `contextMenus` permission wasn't judged worth it.
+- Dragging a link carries the `mailto:` URL.
 
 ### Chooser dialog (`src/dialog.ts`)
 
@@ -169,7 +270,15 @@ only layer where we can meaningfully intervene.
   for `{ type: 'openOptions' }` messages from the dialog. It used to
   open a small popup window, which was easy to lose behind other
   windows and too small for the target list.
-- Kept intentionally tiny — all rewriting logic lives in the
+- Opens a destination **in a background tab or a new window** for
+  `{ type: 'openLink' }` messages, which is how the content script
+  serves Ctrl-click, middle-click and Shift-click. It lives here
+  because only the extension APIs can open a tab without focusing it,
+  and because `sender.tab` gives the opener's window and position.
+  - Re-checks that the URL is `http(s)` first. This is the boundary
+    where a stored template turns into a real navigation, which is
+    worth a guard even though the options page validates on entry.
+- Otherwise kept tiny — all the matching and dialog logic lives in the
   content script.
 
 ### Options page (`src/options.html` + `src/options.ts`)
@@ -263,9 +372,9 @@ A config is an **ordered list of targets**. Each target has:
   RFC 6068 doesn't allow this, but it turns up in the wild.
   - Both placeholders, the domain match, and the dialog's copy buttons
     all use the address from inside the angle brackets.
-  - The full href is preserved separately — in
-    `data-fix-mailto-original` and the dialog's hand-off link — so
-    nothing is lost for the one consumer that wants a real `mailto:`.
+  - The full href is never altered, and the dialog's hand-off link
+    uses it verbatim, so nothing is lost for the one consumer that
+    wants a real `mailto:`.
 
 ### Validation
 
@@ -273,14 +382,11 @@ A config is an **ordered list of targets**. Each target has:
   (leading/trailing whitespace is trimmed first).
 - The restriction isn't cosmetic — each rejected shape breaks the
   extension in a distinct way:
-  - **Empty** rewrites every href to `""`, i.e. a link back to the
-    current page.
-  - **`mailto:`** makes the content script's own output look like a
-    fresh `mailto:` link to its own `MutationObserver`. `setAttribute`
-    queues a mutation record even when the value doesn't change, so
-    this loops without bound and hangs the page.
-  - **`javascript:`** would inject script-executing hrefs into every
-    page the user visits.
+  - **Empty** sends the click to `""`, i.e. back to the current page.
+  - **`mailto:`** hands straight back to the OS email app — the one
+    outcome the extension exists to prevent.
+  - **`javascript:`** would run script in the page on every click, and
+    would be a script-executing link in the dialog.
 - A separate check, `templateUsesAddress`, requires the template to
   mention `{username}` or `{email}`. It is enforced **only** where
   targets are entered (the options page), not in `normalizeConfig`:
@@ -293,6 +399,8 @@ A config is an **ordered list of targets**. Each target has:
     template is unusable. Storage is synced, so a bad value can still
     arrive from another device or a build that predates this
     validation.
+  - The service worker re-checks before opening a new tab or window,
+    the last point before a stored value becomes a navigation.
 - Domains are normalized rather than rejected: `@abc.com`, `*.abc.com`
   and `ABC.com.` all mean `abc.com`, and rejecting input that obviously
   expresses the right intent would just be rude.
@@ -331,7 +439,7 @@ real browser.
   nested, and dynamically-added `mailto:` links, plus a non-mailto
   control. Also usable by hand in a normal browser.
 - `landing.html` — navigation target, so a spec can point the template
-  at it and assert a rewritten link really goes somewhere.
+  at it and assert a click really lands on a page.
 - `iframe_page.html` — a `srcdoc` frame and an `about:blank` frame,
   each holding a `mailto:` link, plus a top-frame link as a positive
   control. Covers the `match_about_blank` manifest setting.
@@ -355,13 +463,33 @@ real browser.
   `#fix-mailto-links-dialog`. Its `toBeVisible()` only works because
   `:host` has a real box; a zero-size host reads as hidden.
 
-- **Always assert with polling matchers** (`toHaveAttribute`,
-  `expect.poll`). The content script awaits a `chrome.storage.sync.get`
-  before its first rewrite pass, so a link is briefly still `mailto:`
-  after load; a bare `getAttribute` races it.
+- **Where a link goes is only observable by clicking it.** Nothing is
+  written to the page, so there is no href to inspect. Specs click,
+  then assert on the resulting navigation, and re-load the fixture page
+  between assertions.
+- **Always assert with polling matchers** (`expect.poll`,
+  `toHaveAttribute`). The first click in a frame awaits a
+  `chrome.storage.sync.get` before it navigates.
+  - Prefer `expect.poll(() => page.url())` over `toHaveURL` for exact
+    URLs: the expected values contain `?` and `*`, which some matcher
+    overloads read as glob metacharacters.
 - **Before asserting a negative** (e.g. "this link was left alone"),
-  first assert some positive rewrite happened. Otherwise the test passes
+  first assert something positive happened. Otherwise the test passes
   against an extension that simply hasn't run yet.
+- **Stub external hosts on the context, not the page** (see
+  `STUB_HOSTS`), so tabs the extension opens are covered too.
+  - Even then, a tab created by the service worker can start loading
+    before Playwright attaches its routing. Specs that assert on
+    Ctrl/middle/Shift-click point at the local fixture server instead,
+    which needs no interception.
+- **The content script calls `stopPropagation()`** on clicks it claims.
+  A probe listener must be a *capture* listener on `document` — the
+  same node — to still see those events.
+- **`chrome.storage.sync` rations writes** (`MAX_WRITE_OPERATIONS_PER_MINUTE`,
+  120). The `config` fixture resets before *and* after every test, so an
+  unconditional remove blows the quota once the suite is big enough and
+  fails a random test. `reset()` reads first and only writes when there
+  is something to clear.
 - **Traces are `on-first-retry`, not `retain-on-failure`.** Recording
   against the long-lived worker-scoped context eventually stalls the
   trace fixture past its own 30s timeout, failing whichever test is next.

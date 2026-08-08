@@ -28,8 +28,8 @@
 
     <script>
       // Fill the about:blank frame from the parent. Its content script is
-      // injected at document_start but only rewrites after awaiting
-      // chrome.storage, so this link is in place well before that pass.
+      // injected at document_start and reads the href at click time, so
+      // this link only has to exist before anyone clicks it.
       const frame = document.getElementById('blank-frame');
       const doc = frame.contentDocument;
       const a = doc.createElement('a');

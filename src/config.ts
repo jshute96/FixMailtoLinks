@@ -46,12 +46,14 @@ const DEFAULT_CONFIG: Config = {
 
 // A template must be an absolute http(s) URL. This is not cosmetic —
 // other schemes actively break the extension:
-//   - `` (empty) rewrites every link to href="", i.e. a self-link.
-//   - `mailto:...` makes the content script's own rewrite look like a
-//     fresh mailto: link to its MutationObserver, which rewrites it
-//     again, forever.
-//   - `javascript:...` would inject script-executing hrefs into every
-//     page the user visits.
+//   - `` (empty) sends the click to the current page.
+//   - `mailto:...` hands straight back to the OS mail app, i.e. the one
+//     outcome the extension exists to prevent.
+//   - `javascript:...` would run script in the page on every click, and
+//     in the dialog would be a script-executing link.
+// The service worker applies the same http(s) test before opening a new
+// tab or window, so a bad value already in storage can't get through
+// that path either.
 function isValidTemplate(template: string): boolean {
   return /^https?:\/\//i.test(template.trim());
 }

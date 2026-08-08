@@ -256,11 +256,11 @@ test.describe('options page', () => {
     await page.close();
   });
 
-  test.describe('rejects link targets that would break the rewriter', () => {
+  test.describe('rejects link targets that would break the extension', () => {
     // Each of these is stopped at the options page rather than saved:
-    // empty blanks out every href, mailto: sends the content script into
-    // an infinite rewrite loop, and javascript: would inject executable
-    // hrefs into every page the user visits.
+    // empty sends the click back to the current page, mailto: hands
+    // straight to the email app the extension exists to avoid, and
+    // javascript: would run script in every page the user visits.
     for (const [label, template] of [
       ['an empty target', ''],
       ['a whitespace-only target', '   '],
@@ -356,10 +356,14 @@ test.describe('options page', () => {
     // update without a reload.
     const linkPage = await extensionContext.newPage();
     await linkPage.goto(`${fixtureServer.baseUrl}/${PAGE}`);
-    // The shipped default isn't automatic, so the link starts untouched.
+    // The shipped default isn't automatic, so the link starts out asking.
+    // Clicking here also makes the frame read its config, which is what
+    // registers the storage listener the assertion at the end depends on.
+    await linkPage.getByRole('link', { name: 'alice@example.com' }).click();
     await expect(
-      linkPage.getByRole('link', { name: 'alice@example.com' }),
-    ).toHaveAttribute('href', 'mailto:alice@example.com');
+      linkPage.locator('#fix-mailto-links-dialog').locator('.panel'),
+    ).toBeVisible();
+    await linkPage.keyboard.press('Escape');
 
     const optionsPage = await extensionContext.newPage();
     await openOptions(optionsPage, extensionId);
@@ -370,9 +374,12 @@ test.describe('options page', () => {
     await optionsPage.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(optionsPage.locator('#status')).toHaveText('Saved.');
 
-    await expect(
-      linkPage.getByRole('link', { name: 'alice@example.com' }),
-    ).toHaveAttribute('href', 'https://example.test/lookup?u=alice');
+    // No reload of linkPage: the click below has to pick up the new
+    // target from the storage listener alone.
+    await linkPage.getByRole('link', { name: 'alice@example.com' }).click();
+    await expect
+      .poll(() => linkPage.url())
+      .toBe('https://example.test/lookup?u=alice');
 
     await optionsPage.close();
     await linkPage.close();
