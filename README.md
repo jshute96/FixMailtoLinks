@@ -37,6 +37,15 @@ The Options page:
 
 ![The options page](docs/screenshots/options-page.png)
 
+## Privacy
+
+The extension collects nothing and makes no network requests. Your rules
+are stored in Chrome's synced extension storage; email addresses are read
+from the link you click and only ever sent to the target site your own
+rule points at.
+
+See [PRIVACY.md](PRIVACY.md) for the full policy.
+
 ## Installation
 
 ### From a release zip

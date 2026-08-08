@@ -11,6 +11,7 @@ One-line descriptions of every source file, grouped by directory.
 | `package.json` | Node project manifest, scripts, devDependencies |
 | `package-lock.json` | Pinned dependency tree for `npm install` |
 | `LICENSE` | MIT license |
+| `PRIVACY.md` | Privacy policy for the Chrome Web Store listing — what is stored, read, and sent |
 | `tsconfig.json` | TypeScript compiler config for the extension build |
 | `tsconfig.tests.json` | Typecheck-only config covering `tests/`, which `tsconfig.json` excludes |
 | `playwright.config.ts` | Playwright test runner config |
