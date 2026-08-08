@@ -41,6 +41,8 @@ One-line descriptions of every source file, grouped by directory.
 | File | Description |
 |------|-------------|
 | `scripts/build.mjs` | Cleans `dist/`, copies icons, manifest and `options.html`, then runs `tsc` |
+| `scripts/zip_extension.sh` | Builds the extension and zips `dist/` into `/tmp/` for distribution |
+| `scripts/release-extension.sh` | Cuts a `vX.Y.Z` GitHub release: version checks, tag, and zip upload |
 
 ## Tests (`tests/`)
 

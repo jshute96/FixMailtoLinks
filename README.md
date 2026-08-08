@@ -39,7 +39,15 @@ The Options page:
 
 ## Installation
 
-### Chrome extension
+### From a release zip
+
+1. Download `FixMailtoLinks-vX.Y.Z.zip` from the
+   [Releases page](https://github.com/jshute96/FixMailtoLinks/releases)
+   and unzip it.
+2. In Chrome: open `chrome://extensions`, enable **Developer mode**,
+   click **Load unpacked**, and select the unzipped directory.
+
+### From source
 
 1. Clone this repo and install dependencies:
    ```bash
@@ -90,12 +98,40 @@ Useful for trying the extension interactively:
 - [`iframe_page.html`](tests/fixtures/pages/iframe_page.html) — links
   inside `about:blank` and `srcdoc` frames.
 
+## Releasing
+
+Cut a GitHub release with `scripts/release-extension.sh` (tag `vX.Y.Z`).
+
+1. Bump the version in **both** `package.json` and `src/manifest.json`
+   to the same value, and commit.
+2. From a clean `main`, run:
+   ```bash
+   scripts/release-extension.sh             # draft (default)
+   scripts/release-extension.sh --publish   # publish immediately
+   ```
+
+The script verifies the versions match, `main` is clean and in sync with
+`origin/main`, and the tag is unused; then builds + zips the extension as
+`/tmp/FixMailtoLinks-vX.Y.Z.zip`, creates and pushes an annotated tag, and
+calls `gh release create` (the [GitHub CLI](https://cli.github.com/)) with
+auto-generated notes and the zip attached. The default is a draft so you can
+review and publish from the GitHub UI.
+
+To build a distributable zip without releasing:
+
+```bash
+scripts/zip_extension.sh   # writes /tmp/FixMailtoLinks.zip
+```
+
 ## Layout
 
 - `src/` — TypeScript sources and `manifest.json`
 - `dist/` — built extension (gitignored, loaded unpacked into Chrome)
 - `scripts/build.mjs` — build script (cleans `dist/`, copies icons,
   manifest and `options.html`, runs `tsc`)
+- `scripts/zip_extension.sh` — builds and zips `dist/` for distribution
+- `scripts/release-extension.sh` — cuts a tagged GitHub release with the
+  zip attached
 - `tests/e2e/` — Playwright tests
 - `tests/fixtures/extension.ts` — fixtures that load the extension,
   expose its service worker, serve the fixture pages, and reset config
