@@ -1,4 +1,4 @@
-// Build script for the GoogleDocsDiffRange Chrome extension.
+// Build script for the FixMailtoLinks Chrome extension.
 //
 // What this does, end to end:
 //   1. Wipes the dist/ directory so each build starts from a clean slate.
