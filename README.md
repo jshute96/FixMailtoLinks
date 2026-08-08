@@ -8,9 +8,14 @@ Users can configure what to link to.
 - Once installed, every `mailto:` link on every page is rewritten in
   place. By default, clicking such a link runs a Google search for
   the email address instead of opening an email client.
+- Rewriting also covers `about:blank` and `srcdoc` iframes, which
+  some pages use to build embedded content.
 - Click the extension's toolbar icon (or open the extension's options
   from `chrome://extensions`) to change the URL template. Use
   `{email}` as a placeholder for the address; it will be URL-encoded.
+- The template must be an `http://` or `https://` URL — other schemes
+  are rejected, since e.g. a `mailto:` template would send the
+  rewriter into an endless loop.
 - Settings are stored in Chrome's synced storage, so they follow your
   Chrome profile across devices.
 
@@ -61,7 +66,8 @@ works and the gotchas it encodes.
 To poke at the extension by hand, load `dist/` unpacked and open
 `tests/fixtures/pages/link_page.html` — it has plain, parameterized,
 nested, and dynamically added `mailto:` links, plus a non-mailto
-control.
+control. `iframe_page.html` next to it covers links inside
+`about:blank` and `srcdoc` frames.
 
 ## Layout
 

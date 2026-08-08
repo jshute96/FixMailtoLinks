@@ -44,6 +44,9 @@
         color: #2a7a2a;
         font-size: 0.9rem;
       }
+      #status.error {
+        color: #b3261e;
+      }
     </style>
   </head>
   <body>
@@ -54,7 +57,8 @@
     <input id="urlTemplate" type="text" spellcheck="false" />
     <div class="hint">
       Use <code>{email}</code> as a placeholder for the email address.
-      It will be URL-encoded when substituted.
+      It will be URL-encoded when substituted. The template must start
+      with <code>http://</code> or <code>https://</code>.
     </div>
 
     <div class="row">

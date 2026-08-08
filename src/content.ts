@@ -42,6 +42,16 @@ function rewriteUrl(template: string, email: string): string {
   return template.replace(/\{email\}/g, encodeURIComponent(email));
 }
 
+// Mirrors normalizeTemplate() in config.ts (see the header comment on
+// why this file duplicates instead of importing). A stored template can
+// be empty or use a scheme that breaks us — notably `mailto:`, which
+// would make our own rewrite look like a fresh mailto: link to the
+// observer below and loop forever — so never trust storage directly.
+function normalizeTemplate(template: string | undefined): string {
+  const trimmed = (template ?? '').trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : DEFAULT_TEMPLATE;
+}
+
 function rewriteAnchor(a: HTMLAnchorElement, cfg: ContentConfig): void {
   const original =
     a.getAttribute(ORIGINAL_ATTR) ?? a.getAttribute('href') ?? '';
@@ -80,12 +90,27 @@ function observe(): void {
         rec.attributeName === 'href' &&
         rec.target instanceof HTMLAnchorElement
       ) {
-        // Href changed under us; if it's mailto: again, rewrite.
+        // Href changed under us. Note we read the *current* href rather
+        // than the recorded one: records are delivered in batches, so by
+        // the time we see them the element (and currentConfig) may have
+        // moved on, and the live value is what we actually care about.
         const a = rec.target;
         const href = a.getAttribute('href') ?? '';
         if (href.toLowerCase().startsWith('mailto:')) {
+          // Pointed back at mailto: — treat it as a brand new link so the
+          // stashed original is re-derived from this address, not the old.
           a.removeAttribute(ORIGINAL_ATTR);
           rewriteAnchor(a, currentConfig);
+        } else if (a.hasAttribute(ORIGINAL_ATTR)) {
+          // The page changed an already-rewritten link to some non-mailto
+          // URL of its own. Drop our marker so a later template change
+          // doesn't resurrect the old address and clobber the page's
+          // deliberate href. We must not drop it for our *own* writes,
+          // which also land here — those match the current template.
+          const email = emailFromMailto(a.getAttribute(ORIGINAL_ATTR) ?? '');
+          if (!email || href !== rewriteUrl(currentConfig.urlTemplate, email)) {
+            a.removeAttribute(ORIGINAL_ATTR);
+          }
         }
       }
     }
@@ -101,7 +126,7 @@ function observe(): void {
 async function main(): Promise<void> {
   const stored = await chrome.storage.sync.get(STORAGE_KEY);
   const cfg = stored[STORAGE_KEY] as Partial<ContentConfig> | undefined;
-  currentConfig = { urlTemplate: cfg?.urlTemplate ?? DEFAULT_TEMPLATE };
+  currentConfig = { urlTemplate: normalizeTemplate(cfg?.urlTemplate) };
   rewriteAll(document, currentConfig);
   observe();
 
@@ -111,7 +136,7 @@ async function main(): Promise<void> {
     const next = changes[STORAGE_KEY].newValue as
       | Partial<ContentConfig>
       | undefined;
-    currentConfig = { urlTemplate: next?.urlTemplate ?? DEFAULT_TEMPLATE };
+    currentConfig = { urlTemplate: normalizeTemplate(next?.urlTemplate) };
     rewriteAll(document, currentConfig);
   });
 }

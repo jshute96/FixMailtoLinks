@@ -28,8 +28,8 @@ One-line descriptions of every source file, grouped by directory.
 | `src/manifest.json` | Manifest V3 manifest, copied verbatim into `dist/` |
 | `src/background.ts` | MV3 service worker — opens the options page when the toolbar icon is clicked |
 | `src/content.ts` | Content script — rewrites `mailto:` links on every page using the configured URL template |
-| `src/config.ts` | Shared config types, defaults, and storage helpers used by the options page |
-| `src/options.ts` | Options page script — loads/saves the URL template in synced storage |
+| `src/config.ts` | Shared config types, defaults, template validation, and storage helpers used by the options page |
+| `src/options.ts` | Options page script — loads, validates, and saves the URL template in synced storage |
 | `src/options.html` | Options page markup; opened in a tab and hosts the template editor |
 
 ## Scripts (`scripts/`)
@@ -45,6 +45,7 @@ One-line descriptions of every source file, grouped by directory.
 | `tests/fixtures/extension.ts` | Playwright fixtures: extension-loaded Chromium, page server, and config helper |
 | `tests/fixtures/pages/link_page.html` | Manual/E2E test page with plain, parameterized, nested, and dynamically added mailto links |
 | `tests/fixtures/pages/landing.html` | Trivial navigation target for the click-through test |
+| `tests/fixtures/pages/iframe_page.html` | Test page with mailto links inside `srcdoc` and `about:blank` frames |
 | `tests/e2e/rewrite.spec.ts` | E2E specs for content-script rewriting: parsing, encoding, mutations, templates |
 | `tests/e2e/options.spec.ts` | E2E specs for the options page: load, save, reset, and effect on open pages |
 

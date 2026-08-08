@@ -60,6 +60,83 @@ test.describe('options page', () => {
     await page.close();
   });
 
+  test('pressing Enter in the input saves', async ({
+    extensionContext,
+    extensionId,
+    config,
+  }) => {
+    const page = await extensionContext.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+
+    await page.locator('#urlTemplate').fill('https://example.test/s?q={email}');
+    await page.locator('#urlTemplate').press('Enter');
+    await expect(page.locator('#status')).toHaveText('Saved.');
+
+    await expect
+      .poll(() => config.getTemplate())
+      .toBe('https://example.test/s?q={email}');
+
+    await page.close();
+  });
+
+  test('trims surrounding whitespace before saving', async ({
+    extensionContext,
+    extensionId,
+    config,
+  }) => {
+    const page = await extensionContext.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+
+    await page.locator('#urlTemplate').fill('  https://example.test/s?q={email}  ');
+    await page.getByRole('button', { name: 'Save' }).click();
+
+    await expect
+      .poll(() => config.getTemplate())
+      .toBe('https://example.test/s?q={email}');
+    await expect(page.locator('#urlTemplate')).toHaveValue(
+      'https://example.test/s?q={email}',
+    );
+
+    await page.close();
+  });
+
+  test.describe('rejects templates that would break the rewriter', () => {
+    // Each of these is stopped at the options page rather than saved:
+    // empty blanks out every href, mailto: sends the content script into
+    // an infinite rewrite loop, and javascript: would inject executable
+    // hrefs into every page the user visits.
+    for (const [label, template] of [
+      ['an empty template', ''],
+      ['a whitespace-only template', '   '],
+      ['a mailto: template', 'mailto:{email}'],
+      ['a javascript: template', 'javascript:alert(1)'],
+      ['a bare domain with no scheme', 'example.test/s?q={email}'],
+    ] as const) {
+      test(label, async ({ extensionContext, extensionId, config }) => {
+        await config.setTemplate('https://example.test/lookup?addr={email}');
+        const page = await extensionContext.newPage();
+        await page.goto(`chrome-extension://${extensionId}/options.html`);
+        await expect(page.locator('#urlTemplate')).toHaveValue(
+          'https://example.test/lookup?addr={email}',
+        );
+
+        await page.locator('#urlTemplate').fill(template);
+        await page.getByRole('button', { name: 'Save' }).click();
+
+        await expect(page.locator('#status')).toHaveText(
+          'Enter a URL starting with http:// or https://',
+        );
+        await expect(page.locator('#status')).toHaveClass(/error/);
+        // The previously stored template survives untouched.
+        expect(await config.getTemplate()).toBe(
+          'https://example.test/lookup?addr={email}',
+        );
+
+        await page.close();
+      });
+    }
+  });
+
   test('the status message clears itself after a moment', async ({
     extensionContext,
     extensionId,

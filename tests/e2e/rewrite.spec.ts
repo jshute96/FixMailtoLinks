@@ -180,6 +180,41 @@ test.describe('mailto rewriting with the default template', () => {
     await page.close();
   });
 
+  test('gives up a link the page repoints at a non-mailto URL', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+    await expectHref(page, 'alice@example.com', googleSearch('alice@example.com'));
+
+    // The page takes the link back for its own purposes. We leave it
+    // alone at the time — but the stashed original must be dropped too,
+    // or the next template change re-derives the old address and
+    // clobbers what the page deliberately set.
+    await page.evaluate(() => {
+      const a = document.querySelector<HTMLAnchorElement>(
+        'a[data-fix-mailto-original="mailto:alice@example.com"]',
+      );
+      a!.setAttribute('href', 'https://example.com/alice-profile');
+    });
+    await expectHref(page, 'alice@example.com', 'https://example.com/alice-profile');
+
+    await config.setTemplate('https://example.test/lookup?addr={email}');
+
+    // A sibling link proves the template change really propagated, so the
+    // assertion below isn't just passing on a change that never arrived.
+    await expectHref(
+      page,
+      'Dave (with subject/body)',
+      'https://example.test/lookup?addr=dave%40example.com',
+    );
+    await expectHref(page, 'alice@example.com', 'https://example.com/alice-profile');
+
+    await page.close();
+  });
+
   test('clicking a rewritten link actually navigates to the target', async ({
     extensionContext,
     fixtureServer,
@@ -202,6 +237,95 @@ test.describe('mailto rewriting with the default template', () => {
     await page.waitForURL(/landing\.html/);
     await expect(page.locator('#target')).toHaveText('landing page');
     expect(new URL(page.url()).searchParams.get('to')).toBe('alice@example.com');
+
+    await page.close();
+  });
+});
+
+test.describe('frames without a URL of their own', () => {
+  // `match_about_blank` in the manifest is what makes these work; drop it
+  // and both assertions below fail while the top-frame one still passes.
+  const FRAME_PAGE = 'iframe_page.html';
+
+  test('rewrites links inside srcdoc and about:blank frames', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    void config;
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${FRAME_PAGE}`);
+
+    // Positive control in the top frame first, so a failure below means
+    // "the frames were missed", not "the extension hadn't run yet".
+    await expectHref(page, 'top@example.com', googleSearch('top@example.com'));
+
+    await expect(
+      page
+        .frameLocator('#srcdoc-frame')
+        .getByRole('link', { name: 'srcdoc@example.com' }),
+    ).toHaveAttribute('href', googleSearch('srcdoc@example.com'));
+
+    await expect(
+      page
+        .frameLocator('#blank-frame')
+        .getByRole('link', { name: 'blank@example.com' }),
+    ).toHaveAttribute('href', googleSearch('blank@example.com'));
+
+    await page.close();
+  });
+});
+
+test.describe('templates that would break the rewriter', () => {
+  // These can only reach the content script through storage — the options
+  // page rejects them — but storage is synced, so a value written by an
+  // older build or another device has to be survivable.
+
+  test('ignores an empty template instead of emptying every href', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    await config.setTemplate('   ');
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+
+    // Without normalization the href would become "", i.e. a link back to
+    // the current page.
+    await expectHref(page, 'alice@example.com', googleSearch('alice@example.com'));
+
+    await page.close();
+  });
+
+  test('ignores a mailto: template rather than looping forever', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    // A mailto: template makes the rewriter's own output look like a fresh
+    // mailto: link to its MutationObserver, which rewrites it again — an
+    // unbounded loop that hangs the page.
+    await config.setTemplate('mailto:{email}');
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+
+    await expectHref(page, 'alice@example.com', googleSearch('alice@example.com'));
+    // The page is still responsive, not spinning in the observer.
+    expect(await page.evaluate(() => 1 + 1)).toBe(2);
+
+    await page.close();
+  });
+
+  test('ignores a javascript: template', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    await config.setTemplate('javascript:alert(1)');
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+
+    await expectHref(page, 'alice@example.com', googleSearch('alice@example.com'));
 
     await page.close();
   });

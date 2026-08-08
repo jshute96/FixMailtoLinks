@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mailto Links in Frames</title>
+  </head>
+  <body>
+    <h1>Mailto Links in Frames</h1>
+    <p>
+      Frames with no URL of their own (<code>about:blank</code> and
+      <code>srcdoc</code>) inherit this page's origin. The manifest sets
+      <code>match_about_blank</code> so the content script reaches them;
+      without it the links below would stay <code>mailto:</code>.
+    </p>
+
+    <!-- A same-origin control in the top frame, so a spec can confirm
+         the extension ran at all before asserting about the frames. -->
+    <p><a href="mailto:top@example.com">top@example.com</a></p>
+
+    <h2>srcdoc frame</h2>
+    <iframe
+      id="srcdoc-frame"
+      srcdoc='<a href="mailto:srcdoc@example.com">srcdoc@example.com</a>'
+    ></iframe>
+
+    <h2>about:blank frame</h2>
+    <iframe id="blank-frame" src="about:blank"></iframe>
+
+    <script>
+      // Fill the about:blank frame from the parent. Its content script is
+      // injected at document_start but only rewrites after awaiting
+      // chrome.storage, so this link is in place well before that pass.
+      const frame = document.getElementById('blank-frame');
+      const doc = frame.contentDocument;
+      const a = doc.createElement('a');
+      a.href = 'mailto:blank@example.com';
+      a.textContent = 'blank@example.com';
+      doc.body.appendChild(a);
+    </script>
+  </body>
+</html>

@@ -44,7 +44,12 @@ only layer where we can meaningfully intervene.
 ### Content script (`src/content.ts`)
 
 - Runs at `document_start` on all URLs and all frames.
-- Loads the saved config from `chrome.storage.sync`.
+- `match_about_blank` is set so the script also reaches frames with
+  no URL of their own — `about:blank` and `srcdoc` iframes, which
+  inherit their parent's origin. Some embeds build their content
+  that way; without this they'd be skipped entirely.
+- Loads the saved config from `chrome.storage.sync`, normalizing it
+  (see *URL template format*) rather than trusting the stored value.
 - On first run, walks the DOM and rewrites all
   `a[href^="mailto:"]` anchors.
 - Uses a `MutationObserver` to catch links added later by SPAs or
@@ -53,9 +58,22 @@ only layer where we can meaningfully intervene.
 - Listens for `chrome.storage.onChanged` so that saving a new
   template in the options page updates already-open tabs without a
   reload.
+
+#### Tracking the original address
+
 - Stashes the original `mailto:` href on a
   `data-fix-mailto-original` attribute so a template change can
   re-derive the email instead of re-parsing the rewritten URL.
+- If a page repoints an already-rewritten link at some other
+  non-`mailto:` URL, the observer **drops** that attribute. Keeping
+  it would let the next template change re-derive the old address
+  and clobber the href the page deliberately set.
+- Our own rewrites reach that same code path, so the observer only
+  drops the attribute when the current href differs from what the
+  current template produces for the stashed address.
+- The observer reads the element's *live* href, not the value in the
+  mutation record: records arrive in batches, so by delivery time the
+  element and the active config may both have moved on.
 
 ### Background service worker (`src/background.ts`)
 
@@ -67,14 +85,18 @@ only layer where we can meaningfully intervene.
 ### Options page (`src/options.html` + `src/options.ts`)
 
 - Simple form with one text input (the URL template) and Save /
-  Reset buttons.
+  Reset buttons. Enter in the input saves too.
 - Reads and writes a single object (`{ urlTemplate }`) in
   `chrome.storage.sync` under the key `config`.
+- Validates on save and **refuses** an invalid template, showing an
+  error instead. Silently substituting the default would throw away
+  what the user typed, which is worse than saying no.
 
 ### Shared config (`src/config.ts`)
 
-- Exposes `Config`, `DEFAULT_CONFIG`, `STORAGE_KEY`, and
-  `loadConfig` / `saveConfig` helpers.
+- Exposes `Config`, `DEFAULT_CONFIG`, `STORAGE_KEY`,
+  `isValidTemplate` / `normalizeTemplate`, and `loadConfig` /
+  `saveConfig` helpers.
 - Used by the options page (as an ES module).
 - **Not** imported by the content script — MV3 content scripts do
   not support static ES module imports, so the handful of helpers
@@ -85,6 +107,27 @@ only layer where we can meaningfully intervene.
 - Free-form string; substring `{email}` is replaced with the
   URL-encoded email address at rewrite time.
 - Default: `https://www.google.com/search?q={email}`.
+
+### Validation
+
+- A template must be an absolute `http://` or `https://` URL
+  (leading/trailing whitespace is trimmed first).
+- The restriction isn't cosmetic — each rejected shape breaks the
+  extension in a distinct way:
+  - **Empty** rewrites every href to `""`, i.e. a link back to the
+    current page.
+  - **`mailto:`** makes the content script's own output look like a
+    fresh `mailto:` link to its own `MutationObserver`. `setAttribute`
+    queues a mutation record even when the value doesn't change, so
+    this loops without bound and hangs the page.
+  - **`javascript:`** would inject script-executing hrefs into every
+    page the user visits.
+- Enforced in two places, deliberately:
+  - The options page rejects a bad template outright.
+  - Every reader (`loadConfig`, and the content script on both the
+    initial load and the `onChanged` path) normalizes to the default.
+    Storage is synced, so a bad value can still arrive from another
+    device or a build that predates this validation.
 
 ## Storage layout
 
@@ -120,6 +163,9 @@ real browser.
   control. Also usable by hand in a normal browser.
 - `landing.html` — navigation target, so a spec can point the template
   at it and assert a rewritten link really goes somewhere.
+- `iframe_page.html` — a `srcdoc` frame and an `about:blank` frame,
+  each holding a `mailto:` link, plus a top-frame link as a positive
+  control. Covers the `match_about_blank` manifest setting.
 
 ### The `config` fixture
 
