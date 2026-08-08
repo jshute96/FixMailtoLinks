@@ -1,23 +1,27 @@
 # ![icon](src/icons/icon-48.png) Fix Mailto Links Chrome Extension
 
-This chrome extension rewrites mailto: links into normal links.
-Users can configure what to link to.
+This chrome extension rewrites `mailto:` links into normal links
+to configured target pages, or opens a dialog box where you can pick
+a target page or copy the email address.
 
-## Usage
+Typically, you might prefer linking into your people directory rather than
+opening an email client.
 
-- Once installed, every `mailto:` link on every page is rewritten in
-  place. By default, clicking such a link runs a Google search for
-  the email address instead of opening an email client.
-- Rewriting also covers `about:blank` and `srcdoc` iframes, which
-  some pages use to build embedded content.
-- Click the extension's toolbar icon (or open the extension's options
-  from `chrome://extensions`) to change the URL template. Use
-  `{email}` as a placeholder for the address; it will be URL-encoded.
-- The template must be an `http://` or `https://` URL — other schemes
-  are rejected, since e.g. a `mailto:` template would send the
-  rewriter into an endless loop.
-- Settings are stored in Chrome's synced storage, so they follow your
-  Chrome profile across devices.
+## Configuration
+
+Click the toolbar icon to open the Options page, where you configure the
+target links.
+
+- There's an ordered list of rules, optionally matching by the email's
+  domain, each with a target link.
+- A target link is an `http://` or `https://` URL containing `{email}`
+  (the whole address) or `{username}` (the part before the `@`).
+- These either open the first match directly, or open a dialog box
+  showing all matching targets.
+- "Test it" tries an address against the rules currently on screen,
+  before you save them.
+
+Settings sync with your Chrome profile.
 
 ## Installation
 
@@ -63,11 +67,14 @@ extension loaded against the fixture pages in `tests/fixtures/pages/`.
 See the Testing section of `docs/architecture.md` for how the harness
 works and the gotchas it encodes.
 
-To poke at the extension by hand, load `dist/` unpacked and open
-`tests/fixtures/pages/link_page.html` — it has plain, parameterized,
-nested, and dynamically added `mailto:` links, plus a non-mailto
-control. `iframe_page.html` next to it covers links inside
-`about:blank` and `srcdoc` frames.
+### Test pages
+
+Useful for trying the extension interactively:
+
+- [`link_page.html`](tests/fixtures/pages/link_page.html) — mailto links
+  in various shapes, including dynamically added links.
+- [`iframe_page.html`](tests/fixtures/pages/iframe_page.html) — links
+  inside `about:blank` and `srcdoc` frames.
 
 ## Layout
 

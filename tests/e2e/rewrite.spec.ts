@@ -18,17 +18,38 @@ async function expectHref(page: Page, text: string, href: string): Promise<void>
   await expect(page.getByRole('link', { name: text })).toHaveAttribute('href', href);
 }
 
+// Mirrors encodeForUrl() in src/config.ts: encodeURIComponent, but with
+// `@` left readable, which RFC 3986 permits in a query.
 function googleSearch(email: string): string {
-  return `https://www.google.com/search?q=${encodeURIComponent(email)}`;
+  const encoded = encodeURIComponent(email).replace(/%40/g, '@');
+  return `https://www.google.com/search?q=${encoded}`;
 }
 
-test.describe('mailto rewriting with the default template', () => {
+// DEFAULT_CONFIG's single target matches every address but is *not*
+// automatic, so a fresh install leaves hrefs alone and offers the search
+// from the dialog. Asserting both halves is what distinguishes it from
+// an empty target list, which also leaves hrefs alone.
+async function expectDefaultTarget(page: Page): Promise<void> {
+  expect(DEFAULT_TEMPLATE).toBe('https://www.google.com/search?q={email}');
+  await expectHref(page, 'alice@example.com', 'mailto:alice@example.com');
+  await page.getByRole('link', { name: 'alice@example.com' }).click();
+  const links = page.locator('#fix-mailto-links-dialog').locator('li a');
+  await expect(links.first()).toHaveAttribute('href', googleSearch('alice@example.com'));
+  await page.keyboard.press('Escape');
+}
+
+test.describe('mailto rewriting with an automatic catch-all target', () => {
+  // The shipped default does *not* follow automatically, so these set an
+  // automatic target explicitly rather than leaning on DEFAULT_CONFIG.
+  test.beforeEach(async ({ config }) => {
+    await config.setTemplate(DEFAULT_TEMPLATE);
+  });
+
   test('rewrites a plain mailto: link to a Google search', async ({
     extensionContext,
     fixtureServer,
     config,
   }) => {
-    void config; // fixture resets storage; the default template applies
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
@@ -43,7 +64,6 @@ test.describe('mailto rewriting with the default template', () => {
     fixtureServer,
     config,
   }) => {
-    void config;
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
@@ -63,7 +83,6 @@ test.describe('mailto rewriting with the default template', () => {
     fixtureServer,
     config,
   }) => {
-    void config;
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
@@ -81,7 +100,6 @@ test.describe('mailto rewriting with the default template', () => {
     fixtureServer,
     config,
   }) => {
-    void config;
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
@@ -89,14 +107,15 @@ test.describe('mailto rewriting with the default template', () => {
     await expectHref(
       page,
       'team+news@example.com',
-      'https://www.google.com/search?q=team%2Bnews%40example.com',
+      'https://www.google.com/search?q=team%2Bnews@example.com',
     );
-    // The href is percent-encoded in the source page; the content script
-    // decodes it before substituting, so the display name comes through.
+    // The href is percent-encoded in the source page. The content script
+    // decodes it, then substitutes only the address from inside the
+    // angle brackets — a display name is noise in a lookup URL.
     await expectHref(
       page,
-      'Eve (URL-encoded display name)',
-      googleSearch('"Eve Smith" <eve@example.com>'),
+      '"Eve Smith" <eve@example.com>',
+      googleSearch('eve@example.com'),
     );
 
     await page.close();
@@ -107,7 +126,6 @@ test.describe('mailto rewriting with the default template', () => {
     fixtureServer,
     config,
   }) => {
-    void config;
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
@@ -122,7 +140,6 @@ test.describe('mailto rewriting with the default template', () => {
     fixtureServer,
     config,
   }) => {
-    void config;
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
@@ -143,7 +160,6 @@ test.describe('mailto rewriting with the default template', () => {
     fixtureServer,
     config,
   }) => {
-    void config;
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
@@ -161,7 +177,6 @@ test.describe('mailto rewriting with the default template', () => {
     fixtureServer,
     config,
   }) => {
-    void config;
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
@@ -208,7 +223,7 @@ test.describe('mailto rewriting with the default template', () => {
     await expectHref(
       page,
       'Dave (with subject/body)',
-      'https://example.test/lookup?addr=dave%40example.com',
+      'https://example.test/lookup?addr=dave@example.com',
     );
     await expectHref(page, 'alice@example.com', 'https://example.com/alice-profile');
 
@@ -230,7 +245,7 @@ test.describe('mailto rewriting with the default template', () => {
     await expectHref(
       page,
       'alice@example.com',
-      `${fixtureServer.baseUrl}/landing.html?to=alice%40example.com`,
+      `${fixtureServer.baseUrl}/landing.html?to=alice@example.com`,
     );
     await page.getByRole('link', { name: 'alice@example.com' }).click();
 
@@ -243,6 +258,10 @@ test.describe('mailto rewriting with the default template', () => {
 });
 
 test.describe('frames without a URL of their own', () => {
+  test.beforeEach(async ({ config }) => {
+    await config.setTemplate(DEFAULT_TEMPLATE);
+  });
+
   // `match_about_blank` in the manifest is what makes these work; drop it
   // and both assertions below fail while the top-frame one still passes.
   const FRAME_PAGE = 'iframe_page.html';
@@ -252,7 +271,6 @@ test.describe('frames without a URL of their own', () => {
     fixtureServer,
     config,
   }) => {
-    void config;
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${FRAME_PAGE}`);
 
@@ -279,53 +297,198 @@ test.describe('frames without a URL of their own', () => {
 test.describe('templates that would break the rewriter', () => {
   // These can only reach the content script through storage — the options
   // page rejects them — but storage is synced, so a value written by an
-  // older build or another device has to be survivable.
+  // older build or another device has to be survivable. A target whose
+  // template can't work is dropped, which leaves the link as `mailto:`
+  // (the dialog then offers whatever else is configured).
 
-  test('ignores an empty template instead of emptying every href', async ({
-    extensionContext,
-    fixtureServer,
-    config,
-  }) => {
-    await config.setTemplate('   ');
-    const page = await extensionContext.newPage();
-    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
-
+  for (const [label, template] of [
     // Without normalization the href would become "", i.e. a link back to
     // the current page.
-    await expectHref(page, 'alice@example.com', googleSearch('alice@example.com'));
-
-    await page.close();
-  });
-
-  test('ignores a mailto: template rather than looping forever', async ({
-    extensionContext,
-    fixtureServer,
-    config,
-  }) => {
+    ['an empty template', '   '],
     // A mailto: template makes the rewriter's own output look like a fresh
     // mailto: link to its MutationObserver, which rewrites it again — an
     // unbounded loop that hangs the page.
-    await config.setTemplate('mailto:{email}');
-    const page = await extensionContext.newPage();
-    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+    ['a mailto: template', 'mailto:{email}'],
+    ['a javascript: template', 'javascript:alert(1)'],
+  ] as const) {
+    test(`drops a target with ${label}`, async ({
+      extensionContext,
+      fixtureServer,
+      config,
+    }) => {
+      await config.setTargets([
+        { emailDomain: '', urlTemplate: template, openDirectly: true },
+        // A valid sibling proves the config was read at all, so the
+        // assertion below isn't passing on an extension that never ran.
+        {
+          emailDomain: 'example.org',
+          urlTemplate: 'https://example.test/org?q={email}',
+          openDirectly: true,
+        },
+      ]);
+      const page = await extensionContext.newPage();
+      await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
-    await expectHref(page, 'alice@example.com', googleSearch('alice@example.com'));
-    // The page is still responsive, not spinning in the observer.
-    expect(await page.evaluate(() => 1 + 1)).toBe(2);
+      await expectHref(
+        page,
+        'Email Bob',
+        'https://example.test/org?q=bob@example.org',
+      );
+      await expectHref(page, 'alice@example.com', 'mailto:alice@example.com');
+      // The page is still responsive, not spinning in the observer.
+      expect(await page.evaluate(() => 1 + 1)).toBe(2);
 
-    await page.close();
-  });
+      await page.close();
+    });
+  }
 
-  test('ignores a javascript: template', async ({
+  test('falls back to the default when the whole config is unusable', async ({
     extensionContext,
     fixtureServer,
     config,
   }) => {
-    await config.setTemplate('javascript:alert(1)');
+    // Not an empty target list (a deliberate "always ask"), but a shape
+    // we can make no sense of at all.
+    await config.setRaw({ nonsense: true });
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
 
-    await expectHref(page, 'alice@example.com', googleSearch('alice@example.com'));
+    await expectDefaultTarget(page);
+
+    await page.close();
+  });
+});
+
+test.describe('multiple targets', () => {
+  test('uses the first automatic target whose domain matches', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    await config.setTargets([
+      {
+        emailDomain: 'example.org',
+        urlTemplate: 'https://example.test/org?u={username}',
+        openDirectly: true,
+      },
+      {
+        emailDomain: '',
+        urlTemplate: 'https://example.test/any?q={email}',
+        openDirectly: true,
+      },
+    ]);
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+
+    await expectHref(page, 'Email Bob', 'https://example.test/org?u=bob');
+    // No example.com entry, so the catch-all takes it.
+    await expectHref(
+      page,
+      'alice@example.com',
+      'https://example.test/any?q=alice@example.com',
+    );
+
+    await page.close();
+  });
+
+  test('skips an earlier match that is not automatic', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    // A target that only wants to appear in the dialog must not suppress
+    // a later one the user asked us to follow straight away.
+    await config.setTargets([
+      {
+        emailDomain: '',
+        urlTemplate: 'https://example.test/ask?q={email}',
+        openDirectly: false,
+      },
+      {
+        emailDomain: 'example.com',
+        urlTemplate: 'https://example.test/com?u={username}',
+        openDirectly: true,
+      },
+    ]);
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+
+    await expectHref(page, 'alice@example.com', 'https://example.test/com?u=alice');
+    // bob@example.org matches only the non-automatic catch-all, so his
+    // link is left alone for the dialog to handle.
+    await expectHref(page, 'Email Bob', 'mailto:bob@example.org');
+
+    await page.close();
+  });
+
+  test('matches subdomains of a configured domain', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    await config.setTargets([
+      {
+        emailDomain: 'example.com',
+        urlTemplate: 'https://example.test/com?u={username}',
+        openDirectly: true,
+      },
+    ]);
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+    await expectHref(page, 'alice@example.com', 'https://example.test/com?u=alice');
+
+    await page.evaluate(() => {
+      const a = document.querySelector<HTMLAnchorElement>(
+        'a[href="https://example.com/contact"]',
+      );
+      a!.setAttribute('href', 'mailto:sam@mail.example.com');
+    });
+
+    await expectHref(page, 'regular https link', 'https://example.test/com?u=sam');
+
+    await page.close();
+  });
+
+  test('leaves links alone when nothing is configured', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    // An empty target list is a legitimate choice: always ask.
+    await config.setTargets([]);
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+
+    await expectHref(page, 'alice@example.com', 'mailto:alice@example.com');
+
+    await page.close();
+  });
+
+  test('restores the mailto: href when the target stops matching', async ({
+    extensionContext,
+    fixtureServer,
+    config,
+  }) => {
+    await config.setTemplate('https://example.test/lookup?addr={email}');
+    const page = await extensionContext.newPage();
+    await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
+    await expectHref(
+      page,
+      'alice@example.com',
+      'https://example.test/lookup?addr=alice@example.com',
+    );
+
+    await config.setTargets([
+      {
+        emailDomain: 'other.test',
+        urlTemplate: 'https://example.test/other?q={email}',
+        openDirectly: true,
+      },
+    ]);
+
+    await expectHref(page, 'alice@example.com', 'mailto:alice@example.com');
+    // And the page hasn't been left spinning in the observer.
+    expect(await page.evaluate(() => 1 + 1)).toBe(2);
 
     await page.close();
   });
@@ -344,7 +507,7 @@ test.describe('custom templates', () => {
     await expectHref(
       page,
       'alice@example.com',
-      'https://example.test/lookup?addr=alice%40example.com',
+      'https://example.test/lookup?addr=alice@example.com',
     );
 
     await page.close();
@@ -362,7 +525,7 @@ test.describe('custom templates', () => {
     await expectHref(
       page,
       'alice@example.com',
-      'https://example.test/alice%40example.com/profile?q=alice%40example.com',
+      'https://example.test/alice@example.com/profile?q=alice@example.com',
     );
 
     await page.close();
@@ -373,6 +536,7 @@ test.describe('custom templates', () => {
     fixtureServer,
     config,
   }) => {
+    await config.setTemplate(DEFAULT_TEMPLATE);
     const page = await extensionContext.newPage();
     await page.goto(`${fixtureServer.baseUrl}/${PAGE}`);
     await expectHref(page, 'alice@example.com', googleSearch('alice@example.com'));
@@ -384,14 +548,14 @@ test.describe('custom templates', () => {
     await expectHref(
       page,
       'alice@example.com',
-      'https://example.test/lookup?addr=alice%40example.com',
+      'https://example.test/lookup?addr=alice@example.com',
     );
     // A link added before the change is re-derived too, not just the
     // ones present at load.
     await expectHref(
       page,
       'Dave (with subject/body)',
-      'https://example.test/lookup?addr=dave%40example.com',
+      'https://example.test/lookup?addr=dave@example.com',
     );
 
     await page.close();
@@ -408,13 +572,14 @@ test.describe('custom templates', () => {
     await expectHref(
       page,
       'alice@example.com',
-      'https://example.test/lookup?addr=alice%40example.com',
+      'https://example.test/lookup?addr=alice@example.com',
     );
 
     await config.reset();
 
-    expect(DEFAULT_TEMPLATE).toBe('https://www.google.com/search?q={email}');
-    await expectHref(page, 'alice@example.com', googleSearch('alice@example.com'));
+    // The default target is not automatic, so the href goes back to
+    // mailto: and the search is offered in the dialog instead.
+    await expectDefaultTarget(page);
 
     await page.close();
   });

@@ -54,9 +54,21 @@ type TestFixtures = {
   config: ConfigApi;
 };
 
+export interface TestTarget {
+  emailDomain: string;
+  urlTemplate: string;
+  openDirectly: boolean;
+}
+
 export interface ConfigApi {
+  // Convenience for the common "one automatic catch-all target" case.
   setTemplate(template: string): Promise<void>;
-  getTemplate(): Promise<string | undefined>;
+  setTargets(targets: TestTarget[]): Promise<void>;
+  // Writes a raw value under the config key, for exercising the
+  // normalization of shapes the options page would never produce —
+  // junk synced from another device.
+  setRaw(value: unknown): Promise<void>;
+  getTargets(): Promise<TestTarget[] | undefined>;
   reset(): Promise<void>;
 }
 
@@ -67,20 +79,30 @@ export interface ConfigApi {
 const STORAGE_KEY = 'config';
 export const DEFAULT_TEMPLATE = 'https://www.google.com/search?q={email}';
 
+export function catchAll(urlTemplate: string): TestTarget {
+  return { emailDomain: '', urlTemplate, openDirectly: true };
+}
+
 function makeConfigApi(getServiceWorker: GetServiceWorker): ConfigApi {
-  return {
+  const api: ConfigApi = {
     async setTemplate(template) {
+      await api.setTargets([catchAll(template)]);
+    },
+    async setTargets(targets) {
+      await api.setRaw({ targets });
+    },
+    async setRaw(value) {
       const sw = await getServiceWorker();
       await sw.evaluate(
-        ([key, urlTemplate]) => chrome.storage.sync.set({ [key]: { urlTemplate } }),
-        [STORAGE_KEY, template],
+        ([key, val]) => chrome.storage.sync.set({ [key as string]: val }),
+        [STORAGE_KEY, value] as const,
       );
     },
-    async getTemplate() {
+    async getTargets() {
       const sw = await getServiceWorker();
       return sw.evaluate(async (key) => {
         const stored = await chrome.storage.sync.get(key);
-        return stored[key]?.urlTemplate as string | undefined;
+        return stored[key]?.targets as TestTarget[] | undefined;
       }, STORAGE_KEY);
     },
     async reset() {
@@ -88,6 +110,7 @@ function makeConfigApi(getServiceWorker: GetServiceWorker): ConfigApi {
       await sw.evaluate((key) => chrome.storage.sync.remove(key), STORAGE_KEY);
     },
   };
+  return api;
 }
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({

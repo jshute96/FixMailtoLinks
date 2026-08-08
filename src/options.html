@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -6,7 +6,7 @@
     <style>
       body {
         font-family: system-ui, sans-serif;
-        max-width: 560px;
+        max-width: 52rem;
         margin: 2rem auto;
         padding: 0 1rem;
         color: #222;
@@ -14,21 +14,125 @@
       h1 {
         font-size: 1.25rem;
       }
-      label {
-        display: block;
-        font-weight: 600;
-        margin-top: 1rem;
+      h2 {
+        font-size: 1.05rem;
+        margin-top: 2rem;
       }
-      input[type='text'] {
-        width: 100%;
-        padding: 0.5rem;
-        font-family: ui-monospace, monospace;
-        box-sizing: border-box;
-      }
-      .hint {
-        color: #555;
+      p,
+      li {
         font-size: 0.9rem;
-        margin-top: 0.25rem;
+      }
+      code {
+        background: #f2f2f2;
+        border-radius: 3px;
+        padding: 0 0.2rem;
+      }
+      /* "Add target" on the left, the rules against the right edge, tops
+         level. flex-start rather than stretch so the box keeps its own
+         height instead of growing to the button's line. */
+      .afterrows {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+      /* Reference material, not part of the form — the box and the tint
+         keep it from reading as another row of settings. */
+      .rulesbox {
+        background: #f7f7f7;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 0.75rem 1rem;
+        /* Matches #add's margin-top, which is what levels the two tops. */
+        margin-top: 0.9rem;
+        max-width: 34rem;
+      }
+      .rulesbox h3 {
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #555;
+        margin: 0 0 0.4rem;
+      }
+      .rules {
+        margin: 0;
+        padding-left: 1.2rem;
+      }
+      .rules ul {
+        margin: 0.15rem 0 0.35rem;
+        padding-left: 1.2rem;
+      }
+      hr {
+        border: 0;
+        border-top: 1px solid #ddd;
+        margin: 2rem 0 0;
+      }
+      /* The header and each row are separate grids, so the last two
+         columns need fixed widths — `auto` would size each grid to its
+         own contents and the columns would drift apart. */
+      .grid {
+        display: grid;
+        grid-template-columns: 12rem 1fr 7rem 6.5rem;
+        gap: 0.5rem;
+        align-items: center;
+      }
+      .head {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #444;
+        align-items: end;
+        margin-bottom: 0.6rem;
+      }
+      .head .center {
+        text-align: center;
+      }
+      #targets .grid + .grid {
+        margin-top: 0.5rem;
+      }
+      input[type="text"] {
+        padding: 0.4rem;
+        font-family: ui-monospace, monospace;
+        font-size: 0.85rem;
+        box-sizing: border-box;
+        width: 100%;
+      }
+      /* The checkbox is the whole cell; the column heading carries the
+         label, so keep it centred under that heading. */
+      .auto {
+        display: flex;
+        justify-content: center;
+      }
+      .rowbtns {
+        display: flex;
+        justify-content: center;
+        gap: 0.25rem;
+      }
+      button {
+        padding: 0.4rem 0.8rem;
+        font: inherit;
+        cursor: pointer;
+      }
+      .rowbtns button {
+        padding: 0.25rem 0.45rem;
+        line-height: 1;
+      }
+      .rowbtns button:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      /* Deliberately smaller than Save/Cancel, and tucked just under the
+         last row, so it reads as part of the list rather than as another
+         form-level action. */
+      #add {
+        margin-top: 0.9rem;
+        padding: 0.25rem 0.6rem;
+        font-size: 0.85rem;
+      }
+      .empty {
+        color: #666;
+        font-style: italic;
+        font-size: 0.9rem;
+        margin: 0.5rem 0 0;
       }
       .row {
         margin-top: 1.25rem;
@@ -36,9 +140,10 @@
         gap: 0.5rem;
         align-items: center;
       }
-      button {
-        padding: 0.5rem 1rem;
-        cursor: pointer;
+      .hint {
+        color: #555;
+        font-size: 0.85rem;
+        margin-top: 0.35rem;
       }
       #status {
         color: #2a7a2a;
@@ -47,26 +152,160 @@
       #status.error {
         color: #b3261e;
       }
+      .testLink {
+        font-family: ui-monospace, monospace;
+        font-size: 0.85rem;
+      }
+      /* The .row gap is for separate controls; consecutive test lines are
+         one group and should sit closer together. */
+      .testrow + .testrow {
+        margin-top: 0.5rem;
+      }
     </style>
   </head>
   <body>
-    <h1>Fix Mailto Links</h1>
-    <p>Configure what <code>mailto:</code> links are rewritten to.</p>
+    <h1>Fix Mailto Links — Options</h1>
+    <p>
+      This extension redirects <code>mailto:</code> links to chosen target
+      sites, or opens a dialog box where you can pick.
+    </p>
 
-    <label for="urlTemplate">URL template</label>
-    <input id="urlTemplate" type="text" spellcheck="false" />
-    <div class="hint">
-      Use <code>{email}</code> as a placeholder for the email address.
-      It will be URL-encoded when substituted. The template must start
-      with <code>http://</code> or <code>https://</code>.
+    <hr />
+    <h1>Target sites</h1>
+    <div class="grid head">
+      <span>Email domain</span>
+      <span>Link target URL</span>
+      <span class="center">Open<br />directly</span>
+      <span class="center">Rearrange</span>
+    </div>
+    <div id="targets"></div>
+    <p id="noTargets" class="empty" hidden>
+      No targets — every <code>mailto:</code> link will open the dialog.
+    </p>
+    <div class="afterrows">
+      <div>
+        <button id="add" type="button">Add target</button>
+      </div>
+
+      <div class="rulesbox">
+        <h3>Rules</h3>
+        <ul class="rules">
+          <li>
+            <strong>Email domain</strong>:
+            <ul>
+              <li><code>abc.com</code> — that domain and its subdomains</li>
+              <li>empty — match any address</li>
+            </ul>
+          </li>
+          <li>
+            <strong>Link target URL</strong>:
+            <ul>
+              <li>
+                Target URL, which includes a <code>{username}</code> or
+                <code>{email}</code> substitution
+              </li>
+            </ul>
+          </li>
+          <li>Targets are checked top to bottom.</li>
+          <li>The first match with <strong>open directly</strong> is opened.</li>
+          <li>
+            If none open directly, a dialog box shows all matching links.
+          </li>
+        </ul>
+      </div>
     </div>
 
     <div class="row">
       <button id="save" type="button">Save</button>
-      <button id="reset" type="button">Reset to default</button>
+      <button id="cancel" type="button">Cancel</button>
       <span id="status"></span>
     </div>
 
+    <hr />
+    <h1>Test it</h1>
+    <div class="row testrow">
+      <input
+        id="testEmail"
+        class="testEmail"
+        type="text"
+        spellcheck="false"
+        aria-label="Test email address"
+        value="nobody@example.com"
+        data-default="nobody@example.com"
+        style="max-width: 20rem"
+      />
+      <a id="testLink" class="testLink" href="mailto:nobody@example.com"
+        >mailto:nobody@example.com</a
+      >
+    </div>
+    <div class="row testrow">
+      <input
+        id="testEmail2"
+        class="testEmail"
+        type="text"
+        spellcheck="false"
+        aria-label="Second test email address"
+        value="nobody@example.net"
+        data-default="nobody@example.net"
+        style="max-width: 20rem"
+      />
+      <a id="testLink2" class="testLink" href="mailto:nobody@example.net"
+        >mailto:nobody@example.net</a
+      >
+    </div>
+    <div class="hint">
+      These links use the unsaved settings above.<br />
+      For testing, links open in new tabs here.
+    </div>
+
+    <template id="rowTemplate">
+      <div class="grid">
+        <input
+          class="domain"
+          type="text"
+          spellcheck="false"
+          placeholder="any domain"
+          aria-label="Email domain"
+        />
+        <input
+          class="template"
+          type="text"
+          spellcheck="false"
+          placeholder="https://directory.example.com/people/{username}"
+          aria-label="Link target URL"
+        />
+        <label class="auto">
+          <input type="checkbox" aria-label="Open directly" />
+        </label>
+        <div class="rowbtns">
+          <button class="up" type="button" title="Move up" aria-label="Move up">
+            ↑
+          </button>
+          <button
+            class="down"
+            type="button"
+            title="Move down"
+            aria-label="Move down"
+          >
+            ↓
+          </button>
+          <button
+            class="remove"
+            type="button"
+            title="Remove"
+            aria-label="Remove"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Classic scripts, loaded before the module below: the same files
+         are injected as content scripts, which can't use ES imports, so
+         they share code by defining globals. -->
+    <script src="config.js"></script>
+    <script src="dialog.js"></script>
     <script type="module" src="options.js"></script>
   </body>
 </html>
