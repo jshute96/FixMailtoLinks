@@ -56,4 +56,6 @@ One-line descriptions of every source file, grouped by directory.
 | File | Description |
 |------|-------------|
 | `file-index.md` | This file — one-line descriptions of every source file |
+| `screenshots/options-page.png` | Options page screenshot, shown in `README.md` |
+| `screenshots/dialog-box.png` | Chooser dialog screenshot, shown in `README.md` |
 | `architecture.md` | High-level design: content script, service worker, options page, storage |

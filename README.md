@@ -7,6 +7,13 @@ a target page or copy the email address.
 Typically, you might prefer linking into your people directory rather than
 opening an email client.
 
+The link dialog:
+
+<!-- Both screenshots are stored at the size the UI really is on screen
+     (the dialog is 30rem wide, the options page 52rem), so they render
+     1:1 here and still shrink on a narrow window. -->
+![The chooser dialog](docs/screenshots/dialog-box.png)
+
 ## Configuration
 
 Click the toolbar icon to open the Options page, where you configure the
@@ -22,6 +29,10 @@ target links.
   before you save them.
 
 Settings sync with your Chrome profile.
+
+The Options page:
+
+![The options page](docs/screenshots/options-page.png)
 
 ## Installation
 
