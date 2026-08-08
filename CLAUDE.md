@@ -14,14 +14,48 @@ repository. See `README.md` for setup instructions and available commands.
     - If a doc section grows past ~8 lines, give it sub-headings.
     - Prefer bullets to paragraphs; prefer short bullets to long bullets.
   - When adding a new feature, you can add new sections in the relevant design doc rather than appending to an existing one.
+  - **Avoid stating counts of list elements in comments or docs.** If there are more than 2-3 items, don't say the count before listing them. That requires unnecessary edits when the list changes.
 - **Commit Preparation**:
-  - Ensure `README.md` is updated if setup, commands, or user-visible features change.
+  - Ensure `README.md` is updated if setup, commands, or high-level user-visible features change.
+    - README contains
+      - A high-level user-facing product overview - what it is, what the main UI pages are, but not every feature or capability on those pages.
+      - Setup instructions for users.
+      - Developer instructions - building, testing, tools, etc.
+    - README should be concise and easy to read, without excessive details. It shouldn't list every feature or behavior, or implementation details of how things work.
+    - Use other `docs/*.md` files for more details.
+  - Always update `docs/file-index.md` when the file set changes or file descriptions become stale.
   - Include all significant changes in the commit message.
 
 ## Development Conventions
 
 ### Code Logic
 - **Documentation**: Where code has subtle or surprising logic, add comments to explain the "why" and intended behavior.
+- **Never use `console.warn` / `console.error` in any extension context** (service worker, extension pages, AND injected wrapper / prelude / GM-runtime code). Chrome forwards both into `chrome://extensions/?errors`, which makes SourceMonkey look broken even when the failure is in user-supplied script code or an expected fallback. Use `console.info` instead — it stays in the relevant DevTools console only.
+  - This applies to diagnostics emitted into the **page** console too (e.g. the startup-log channel and the injected error shims in `userscript-prelude.js`): injected `.error`/`.warn` from a `chrome.userScripts`-registered script still surface in the extensions Errors panel.
+  - Capturing error/warning *severity* for the viewer's Log tab is a separate path (the per-script log's `level` field + the `sm:*` reports) and is unaffected — keep logging the real level there; just don't escalate the `console` method.
+
+### Error messages
+Applies to any string a user can read (`errorMessage`, `refreshError`, Log
+entries, banners). Full rules in [docs/diagnostics.md](docs/diagnostics.md#wording).
+
+- **No internal vocabulary** (`SW`, `opaque response`, `fetch threw`).
+- **Name what failed**, and the fix where there is one.
+- **Friendly is not vague.** Plain wording still has to leave something to
+  debug with: name the step that failed, not just the subsystem it was in.
+- **Capitalized, no trailing period, subject included** — the same string
+  appears alone and after prefixes like `This file cannot be installed: `.
+  A capital after that colon is intended.
+  - A tail after a `: ` is a message too, so it takes a capital. If it
+    can't grammatically (`is empty`), give it a subject (`The file is
+    empty`) rather than exempting it.
+  - Only a splice *inside* a sentence we wrote stays lowercase —
+    `LOCATION_SHAPES`, which completes `A source must be an …`.
+- **One message per problem**; wrap the shared string rather than writing a
+  second copy for another surface.
+  - That covers code that *recognizes* a message too: import the shared
+    constant or predicate, never pattern-match the wording.
+- **Don't guess between causes** — say which, or state the possibilities.
+- **`Internal error:` prefix** when the user can't act on it.
 
 ## Planning vs Implementation
 When the user asks you to implement something, start coding quickly. Do NOT
@@ -30,6 +64,7 @@ is needed, keep it concise (bullet points, not paragraphs) and confirm with the
 user before elaborating further. Default to action over planning.
 
 ## Git & Commits
+- Do not commit or push changes without getting user instructions to do so.
 - When committing, include ALL relevant changed files — check `git status` before committing to avoid missing files like TODO.md, documentation, or new files.
 - Always update `docs/file-index.md` when the file set changes or file descriptions become stale.
 
