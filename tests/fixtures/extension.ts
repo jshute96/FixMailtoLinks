@@ -47,7 +47,48 @@ type TestFixtures = {
   // operations risks the handle going stale.
   getServiceWorker: GetServiceWorker;
   extensionId: string;
+  // Reads/writes the extension's synced config. Resets to the default
+  // template before and after each test so a test that changes the
+  // template can't leak into its siblings (the context is worker-scoped,
+  // so storage really does persist across tests).
+  config: ConfigApi;
 };
+
+export interface ConfigApi {
+  setTemplate(template: string): Promise<void>;
+  getTemplate(): Promise<string | undefined>;
+  reset(): Promise<void>;
+}
+
+// Mirrors STORAGE_KEY / DEFAULT_CONFIG in src/config.ts. Duplicated
+// rather than imported: importing from src/ would pull the extension's
+// module graph (and its `chrome.*` globals) into the Node-side test
+// process, where `chrome` doesn't exist.
+const STORAGE_KEY = 'config';
+export const DEFAULT_TEMPLATE = 'https://www.google.com/search?q={email}';
+
+function makeConfigApi(getServiceWorker: GetServiceWorker): ConfigApi {
+  return {
+    async setTemplate(template) {
+      const sw = await getServiceWorker();
+      await sw.evaluate(
+        ([key, urlTemplate]) => chrome.storage.sync.set({ [key]: { urlTemplate } }),
+        [STORAGE_KEY, template],
+      );
+    },
+    async getTemplate() {
+      const sw = await getServiceWorker();
+      return sw.evaluate(async (key) => {
+        const stored = await chrome.storage.sync.get(key);
+        return stored[key]?.urlTemplate as string | undefined;
+      }, STORAGE_KEY);
+    },
+    async reset() {
+      const sw = await getServiceWorker();
+      await sw.evaluate((key) => chrome.storage.sync.remove(key), STORAGE_KEY);
+    },
+  };
+}
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
   fixtureServer: [
@@ -130,6 +171,19 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     const sw = await getServiceWorker();
     const id = new URL(sw.url()).host;
     await use(id);
+  },
+
+  config: async ({ getServiceWorker }, use) => {
+    const api = makeConfigApi(getServiceWorker);
+    await api.reset();
+    await use(api);
+    // Best-effort teardown so a failure mid-test doesn't leave a custom
+    // template behind for the next one.
+    try {
+      await api.reset();
+    } catch {
+      /* context may already be tearing down */
+    }
   },
 });
 

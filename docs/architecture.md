@@ -92,3 +92,54 @@ only layer where we can meaningfully intervene.
 - Key: `config`.
 - Value shape: `{ urlTemplate: string }`.
 - Missing/partial values fall back to `DEFAULT_CONFIG`.
+
+## Testing
+
+Playwright e2e specs in `tests/e2e/`, run with `npm test`. There are no
+unit tests — every interesting behaviour needs a real extension in a
+real browser.
+
+### How the harness works
+
+- `tests/fixtures/extension.ts` launches a persistent Chromium with
+  `dist/` loaded unpacked, and exposes the MV3 service worker.
+- The context is **worker-scoped** (one browser per Playwright worker,
+  reused across tests) because a fresh launch costs ~1s each.
+- The service-worker handle is **test-scoped**: MV3 workers idle out and
+  respawn, which invalidates a cached handle.
+- Specs open their own page via `extensionContext.newPage()` and close
+  it themselves.
+
+### Fixture pages
+
+- Served over `http://` from `tests/fixtures/pages/` by a local server
+  bound to port 0. A real origin is required — unpacked extensions get
+  no `file://` access, and `data:` URLs aren't matched by `<all_urls>`.
+- `link_page.html` — the main target: plain, mixed-case, parameterized,
+  nested, and dynamically-added `mailto:` links, plus a non-mailto
+  control. Also usable by hand in a normal browser.
+- `landing.html` — navigation target, so a spec can point the template
+  at it and assert a rewritten link really goes somewhere.
+
+### The `config` fixture
+
+- Reads/writes the extension's synced config through the service worker.
+- Resets to the default template before and after every test. This
+  matters because the browser context is shared: without it, a test that
+  sets a custom template leaks into its siblings.
+
+### Gotchas worth knowing
+
+- **Always assert with polling matchers** (`toHaveAttribute`,
+  `expect.poll`). The content script awaits a `chrome.storage.sync.get`
+  before its first rewrite pass, so a link is briefly still `mailto:`
+  after load; a bare `getAttribute` races it.
+- **Before asserting a negative** (e.g. "this link was left alone"),
+  first assert some positive rewrite happened. Otherwise the test passes
+  against an extension that simply hasn't run yet.
+- **Traces are `on-first-retry`, not `retain-on-failure`.** Recording
+  against the long-lived worker-scoped context eventually stalls the
+  trace fixture past its own 30s timeout, failing whichever test is next.
+- **`tsconfig.json` does not cover `tests/`** — it is scoped to the
+  extension build. Run `npm run typecheck` (`tsconfig.tests.json`) to
+  typecheck specs; Playwright transpiles them without checking types.

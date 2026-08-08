@@ -10,6 +10,7 @@ One-line descriptions of every source file, grouped by directory.
 | `CLAUDE.md` | Guidance for AI agents working in this repository |
 | `package.json` | Node project manifest, scripts, devDependencies |
 | `tsconfig.json` | TypeScript compiler config for the extension build |
+| `tsconfig.tests.json` | Typecheck-only config covering `tests/`, which `tsconfig.json` excludes |
 | `playwright.config.ts` | Playwright test runner config |
 | `.gitignore` | Git ignore rules |
 
@@ -41,8 +42,11 @@ One-line descriptions of every source file, grouped by directory.
 
 | File | Description |
 |------|-------------|
-| `tests/fixtures/extension.ts` | Playwright fixtures: persistent Chromium context with the extension loaded |
-| `tests/link_page.html` | Manual/E2E test page with plain, parameterized, nested, and dynamically added mailto links |
+| `tests/fixtures/extension.ts` | Playwright fixtures: extension-loaded Chromium, page server, and config helper |
+| `tests/fixtures/pages/link_page.html` | Manual/E2E test page with plain, parameterized, nested, and dynamically added mailto links |
+| `tests/fixtures/pages/landing.html` | Trivial navigation target for the click-through test |
+| `tests/e2e/rewrite.spec.ts` | E2E specs for content-script rewriting: parsing, encoding, mutations, templates |
+| `tests/e2e/options.spec.ts` | E2E specs for the options page: load, save, reset, and effect on open pages |
 
 ## Design Docs (`docs/`)
 

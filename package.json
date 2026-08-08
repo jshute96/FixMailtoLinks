@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.tests.json --noEmit",
     "watch": "node scripts/build.mjs --watch",
     "pretest": "node scripts/build.mjs",
     "test": "playwright test",

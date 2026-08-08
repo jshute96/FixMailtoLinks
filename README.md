@@ -50,7 +50,18 @@ npm run watch        # rebuild on TS changes
 ```bash
 npm test             # run Playwright e2e tests
 npm run test:headed  # same, with a visible browser
+npm run typecheck    # typecheck the test suite (tsc doesn't cover tests/)
 ```
+
+`npm test` rebuilds `dist/` first, then drives a real Chromium with the
+extension loaded against the fixture pages in `tests/fixtures/pages/`.
+See the Testing section of `docs/architecture.md` for how the harness
+works and the gotchas it encodes.
+
+To poke at the extension by hand, load `dist/` unpacked and open
+`tests/fixtures/pages/link_page.html` — it has plain, parameterized,
+nested, and dynamically added `mailto:` links, plus a non-mailto
+control.
 
 ## Layout
 
@@ -59,6 +70,7 @@ npm run test:headed  # same, with a visible browser
 - `scripts/build.mjs` — build script (cleans `dist/`, copies icons and
   manifest, runs `tsc`)
 - `tests/e2e/` — Playwright tests
-- `tests/fixtures/extension.ts` — fixture that loads the extension and
-  exposes its service worker
+- `tests/fixtures/extension.ts` — fixtures that load the extension,
+  expose its service worker, serve the fixture pages, and reset config
+- `tests/fixtures/pages/` — HTML pages the tests (and you) load
 - `docs/` — design docs and the file index
