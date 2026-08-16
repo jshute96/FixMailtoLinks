@@ -1,6 +1,6 @@
 {
   "name": "FixMailtoLinks",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Chrome extension that replaces mailto links with configurable links to other sites",
   "type": "module",
