@@ -15,7 +15,7 @@ The link dialog:
 <!-- Both screenshots are stored at the size the UI really is on screen
      (the dialog is 30rem wide, the options page 52rem), so they render
      1:1 here and still shrink on a narrow window. -->
-![The chooser dialog](docs/screenshots/dialog-box.png)
+![The chooser dialog](docs/images/dialog-box.png)
 
 ## Configuration
 
@@ -35,7 +35,7 @@ Settings sync with your Chrome profile.
 
 The Options page:
 
-![The options page](docs/screenshots/options-page.png)
+![The options page](docs/images/options-page.png)
 
 ## Privacy
 

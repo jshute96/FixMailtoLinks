@@ -62,6 +62,12 @@ One-line descriptions of every source file, grouped by directory.
 | File | Description |
 |------|-------------|
 | `file-index.md` | This file — one-line descriptions of every source file |
-| `screenshots/options-page.png` | Options page screenshot, shown in `README.md` |
-| `screenshots/dialog-box.png` | Chooser dialog screenshot, shown in `README.md` |
+| `images/options-page.png` | Options page screenshot, shown in `README.md` |
+| `images/dialog-box.png` | Chooser dialog screenshot, shown in `README.md` |
+| `images/options-page-webstore.png` | Options screenshot padded to 1280x800 for the Chrome Web Store |
+| `images/dialog-box-webstore.png` | Dialog screenshot padded to 1280x800 for the Chrome Web Store |
+| `images/promo-tile-440x280.png` | 440x280 promo tile for the Chrome Web Store listing |
+| `images/promo-tile.html` | Source the promo tile PNG is rendered from |
+| `images/promo-tile-candidates.html` | Rejected promo tile designs, kept for future listing work |
+| `images/promo-tile-candidates-e.html` | Variants of the chosen promo tile design |
 | `architecture.md` | High-level design: content script, service worker, options page, storage |
