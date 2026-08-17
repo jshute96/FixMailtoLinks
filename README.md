@@ -62,11 +62,11 @@ See [PRIVACY.md](PRIVACY.md) for the full policy.
    ```bash
    git clone https://github.com/jshute96/FixMailtoLinks.git
    cd FixMailtoLinks
-   npm install
+   pnpm install
    ```
 2. Build the extension:
    ```bash
-   npm run build
+   pnpm run build
    ```
 3. In Chrome: open `chrome://extensions`, enable **Developer mode**,
    click **Load unpacked**, and select the `dist/` directory.
@@ -74,26 +74,26 @@ See [PRIVACY.md](PRIVACY.md) for the full policy.
 ## Development setup
 
 ```bash
-npm install
-npx playwright install chromium
+pnpm install
+pnpm exec playwright install chromium
 ```
 
 ## Building
 
 ```bash
-npm run build        # one-shot build into dist/
-npm run watch        # rebuild on TS changes
+pnpm run build        # one-shot build into dist/
+pnpm run watch        # rebuild on TS changes
 ```
 
 ## Testing
 
 ```bash
-npm test             # run Playwright e2e tests
-npm run test:headed  # same, with a visible browser
-npm run typecheck    # typecheck the test suite (tsc doesn't cover tests/)
+pnpm test             # run Playwright e2e tests
+pnpm run test:headed  # same, with a visible browser
+pnpm run typecheck    # typecheck the test suite (tsc doesn't cover tests/)
 ```
 
-`npm test` rebuilds `dist/` first, then drives a real Chromium with the
+`pnpm test` rebuilds `dist/` first, then drives a real Chromium with the
 extension loaded against the fixture pages in `tests/fixtures/pages/`.
 See the Testing section of `docs/architecture.md` for how the harness
 works and the gotchas it encodes.

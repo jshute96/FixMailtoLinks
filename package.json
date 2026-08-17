@@ -4,13 +4,14 @@
   "private": true,
   "description": "Chrome extension that replaces mailto links with configurable links to other sites",
   "type": "module",
+  "packageManager": "pnpm@11.22.0",
   "scripts": {
+    "preinstall": "npx only-allow pnpm",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.tests.json --noEmit",
     "watch": "node scripts/build.mjs --watch",
-    "pretest": "node scripts/build.mjs",
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
+    "test": "node scripts/build.mjs && playwright test",
+    "test:headed": "node scripts/build.mjs && playwright test --headed",
     "clean": "rm -rf dist test-results playwright-report"
   },
   "devDependencies": {

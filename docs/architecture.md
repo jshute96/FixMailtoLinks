@@ -549,7 +549,7 @@ A config is an **ordered list of targets**. Each target has:
 
 ## Testing
 
-Playwright e2e specs in `tests/e2e/`, run with `npm test`. There are no
+Playwright e2e specs in `tests/e2e/`, run with `pnpm test`. There are no
 unit tests — every interesting behaviour needs a real extension in a
 real browser.
 
@@ -630,5 +630,5 @@ real browser.
   against the long-lived worker-scoped context eventually stalls the
   trace fixture past its own 30s timeout, failing whichever test is next.
 - **`tsconfig.json` does not cover `tests/`** — it is scoped to the
-  extension build. Run `npm run typecheck` (`tsconfig.tests.json`) to
+  extension build. Run `pnpm run typecheck` (`tsconfig.tests.json`) to
   typecheck specs; Playwright transpiles them without checking types.

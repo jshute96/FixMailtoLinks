@@ -9,7 +9,7 @@ One-line descriptions of every source file, grouped by directory.
 | `README.md` | Primary project documentation: setup, usage, commands |
 | `CLAUDE.md` | Guidance for AI agents working in this repository |
 | `package.json` | Node project manifest, scripts, devDependencies |
-| `package-lock.json` | Pinned dependency tree for `npm install` |
+| `pnpm-lock.yaml` | Pinned dependency tree for `pnpm install` |
 | `LICENSE` | MIT license |
 | `PRIVACY.md` | Privacy policy for the Chrome Web Store listing — what is stored, read, and sent |
 | `tsconfig.json` | TypeScript compiler config for the extension build |
