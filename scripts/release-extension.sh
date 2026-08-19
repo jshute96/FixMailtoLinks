@@ -131,7 +131,9 @@ PREV_TAG=$(git tag --list 'v*' --sort=-v:refname | sed -n 2p)
 
 {
   cat <<EOF
-**Install:** download \`$(basename "$ZIP")\` below and unzip it. In Chrome, open
+**Install:** from the
+[Chrome Web Store](https://chromewebstore.google.com/detail/fix-mailto-links/leefoippjkdackdnpinmklenempifiej),
+or download \`$(basename "$ZIP")\` below and unzip it, then in Chrome open
 \`chrome://extensions\`, enable **Developer mode**, click **Load unpacked**, and
 select the unzipped directory.
 

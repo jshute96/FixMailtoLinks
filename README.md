@@ -1,16 +1,18 @@
 # ![icon](src/icons/icon-48.png) Fix Mailto Links Chrome Extension
 
-Mailto links are annoying. I never want to open an email app outside the browser,
-or slowly start another gmail tab.
+**Mailto links are annoying.**
 
-This chrome extension redirects clicks on `mailto:` links to configured
-target pages instead of your email app, or opens a dialog box where
-you can pick the target page or copy the email address.
+If you never want a desktop email app to pop up, or a slow new webmail tab, this extension puts you back in control.
 
-Typically, you might prefer linking into your people directory rather than
-opening an email client.
+*Fix Mailto Links* intercepts clicks on `mailto:` links and sends them
+somewhere you actually want to go. You'll get a dialog box where you can copy the email address, or navigate to default sites you can configure.
 
-The link dialog:
+Typically, you might redirect to your organization's people
+directory rather than an email client.
+
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/fix-mailto-links/leefoippjkdackdnpinmklenempifiej).**
+
+**The link dialog:**
 
 <!-- Both screenshots are stored at the size the UI really is on screen
      (the dialog is 30rem wide, the options page 52rem), so they render
@@ -33,7 +35,7 @@ target links.
 
 Settings sync with your Chrome profile.
 
-The Options page:
+**The Options page:**
 
 ![The options page](docs/images/options-page.png)
 
@@ -47,6 +49,10 @@ rule points at.
 See [PRIVACY.md](PRIVACY.md) for the full policy.
 
 ## Installation
+
+### From the Chrome Web Store
+
+**[Install from the Chrome Web Store](https://chromewebstore.google.com/detail/fix-mailto-links/leefoippjkdackdnpinmklenempifiej).**
 
 ### From a release zip
 
